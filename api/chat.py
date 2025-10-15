@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from http.client import HTTPException
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request
@@ -8,6 +10,12 @@ from sqlalchemy.orm import joinedload
 from core.database import db
 from core.models import Conversation, Message, User
 from core.security import token_required
+from models.request import ChatRequest, ChatWithPredictionRequest, PredictionRequest
+from models.response import ChatWithPredictionResponse, PredictionResponse, ChatResponse
+from services import model_service
+from services.llm_service import llm_service
+from services.model_service import model_service
+
 
 chat_bp = Blueprint("chat", __name__)
 
@@ -155,3 +163,108 @@ def create_message(conversation_id: int, current_user: User):
         ),
         201,
     )
+@chat_bp.post("/predict", response_model=PredictionResponse)
+async def predict_endpoint(request: PredictionRequest):
+    try:
+        params = request.dict()
+        prediction = model_service.predict(params)
+        
+        return PredictionResponse(
+            fuel_consumption=prediction,
+            parameters=params
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+    
+
+@chat_bp.post("/chat/<int:chatId>", response_model=ChatWithPredictionResponse)
+async def chat_with_auto_prediction(request: ChatWithPredictionRequest):
+    
+    try:
+        # Step 1: Get LLM response
+        llm_response = await llm_service.chat(request.messages, request.language)
+      
+
+        # Step 2: Check if function call
+        is_function_call, params = llm_service.parse_function_call(llm_response)
+       
+        
+        prediction_result = None
+        final_response = llm_response
+        
+        if is_function_call and params:
+         
+            
+            # Step 3: Make prediction
+          
+            prediction_value = await asyncio.to_thread(model_service.predict, params)
+           
+            
+            # Step 4: Format message based on language
+            if request.language.lower() in ['vi']:
+                print(" Vietnamese detected")
+                language_instruction = {
+                    "role": "system",
+                    "content": "Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh."
+                }
+                assistant_message = (
+                     f"Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh. "
+                    f"Dựa trên các thông số chuyến đi của bạn, mô hình dự đoán đã tính toán "
+                    f"mức tiêu thụ nhiên liệu là **{prediction_value:.2f} đơn vị**.\n\n"
+                    f"Bây giờ để tôi giải thích ý nghĩa của kết quả này và những yếu tố nào đã ảnh hưởng đến dự đoán..."
+                )
+                elaboration_prompt = "Vui lòng giải thích chi tiết về dự đoán này với những thông tin hữu ích."
+            else:
+                language_instruction = None
+                assistant_message = (
+                    f"Based on your trip parameters, the prediction model calculated "
+                    f"a fuel consumption of **{prediction_value:.2f} litter**.\n\n"
+                    f"Now let me explain what this means and what factors influenced this prediction..."
+                )
+                elaboration_prompt = "Please elaborate on this prediction with helpful insights."
+
+            result_messages = []
+
+            result_messages.extend(request.messages + [
+                {
+                    "role": "assistant",
+                    "content": assistant_message
+                }
+            ])
+
+            # Ask LLM to elaborate
+            elaboration_messages = result_messages + [
+                {
+                    "role": "user",
+                    "content": elaboration_prompt
+                }
+            ]
+            
+            
+            # Step 5: Get natural language explanation
+            print("language",request.language)
+          
+            final_response = await llm_service.chat(elaboration_messages, request.language)
+            print(result_messages)
+           
+            
+            prediction_result = {
+                "fuel_consumption": prediction_value,
+                "parameters": params
+            }
+        else:
+            print(" No function call detected, returning original LLM response")
+        
+        print(f" Returning response - prediction_made: {is_function_call}")
+        return ChatWithPredictionResponse(
+            response=final_response,
+            prediction_made=is_function_call,
+            prediction_result=prediction_result
+        )
+    except Exception as e:
+        print(f" ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
