@@ -1,0 +1,32 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs and coverage
+.coverage
+coverage.xml
+*.log
+
+# IDE / Editor settings
+.vscode/
+.idea/
+.DS_Store
+
+# Local test artifacts
+*.sqlite3
+tmp/
+*.db
+
+templates/
+
