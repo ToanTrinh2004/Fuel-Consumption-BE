@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from http.client import HTTPException
 from typing import Any, Dict, List, Optional
+from werkzeug.exceptions import InternalServerError
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import joinedload
@@ -83,7 +84,7 @@ def list_conversations(current_user: User):
     conversations = (
         Conversation.query.options(joinedload(Conversation.messages))
         .filter(Conversation.user_id == current_user.id)
-        .all()
+        .all() 
     )
     data = [_conversation_to_dict(conv, include_messages=False) for conv in conversations]
     return jsonify({"items": data, "total": len(data)})
@@ -122,149 +123,91 @@ def list_messages(conversation_id: int, current_user: User):
     return jsonify({"items": [_message_to_dict(msg) for msg in messages]})
 
 
-@chat_bp.route("/conversations/<int:conversation_id>/messages", methods=["POST"])
-@token_required
-def create_message(conversation_id: int, current_user: User):
-    conversation = Conversation.query.get(conversation_id)
-    if not conversation:
-        return jsonify({"error": "Conversation khong ton tai"}), 404
-
-    if conversation.user_id != current_user.id:
-        return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
-
-    payload = request.get_json(silent=True) or {}
-    content = (payload.get("content") or "").strip()
-
-    if not content:
-        return jsonify({"error": "Noi dung tin nhan khong duoc de trong"}), 400
-
-    user_message = Message(
-        conversation_id=conversation_id,
-        role="user",
-        content=content,
-        metadata_json=None,
-    )
-    assistant_message = Message(
-        conversation_id=conversation_id,
-        role="assistant",
-        content=payload.get("assistant_reply") or DEFAULT_BOT_REPLY,
-        metadata_json=None,
-    )
-
-    db.session.add_all([user_message, assistant_message])
-    db.session.commit()
-
-    return (
-        jsonify(
-            {
-                "user_message": _message_to_dict(user_message),
-                "assistant_message": _message_to_dict(assistant_message),
-            }
-        ),
-        201,
-    )
-@chat_bp.post("/predict", response_model=PredictionResponse)
-async def predict_endpoint(request: PredictionRequest):
+@chat_bp.route("/predict", methods=["POST"])
+def predict_endpoint():
     try:
-        params = request.dict()
-        prediction = model_service.predict(params)
-        
-        return PredictionResponse(
-            fuel_consumption=prediction,
-            parameters=params
-        )
+        # Get JSON body from the request
+        data = request.get_json()
+
+        # Predict using your model service
+        prediction = model_service.predict(data)
+
+        # Build response JSON
+        response = {
+            "fuel_consumption": prediction,
+            "parameters": data
+        }
+
+        return jsonify(response), 200
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+        raise InternalServerError(description=f"Prediction error: {str(e)}")
     
-
-@chat_bp.post("/chat/<int:chatId>", response_model=ChatWithPredictionResponse)
-async def chat_with_auto_prediction(request: ChatWithPredictionRequest):
-    
+@chat_bp.route("/chat", methods=["POST"])
+def chat_with_auto_prediction():
     try:
-        # Step 1: Get LLM response
-        llm_response = await llm_service.chat(request.messages, request.language)
-      
+        data = request.get_json()
+        messages = data.get("messages", [])
+        language = data.get("language", "en")
+        context = data.get("context", [])
+        print(context)
+        if isinstance(context, list) and context:
+            messages = context + messages
 
-        # Step 2: Check if function call
+        #  Get LLM response
+        llm_response = asyncio.run(llm_service.chat(messages, language))
+
+        # Check if function call
         is_function_call, params = llm_service.parse_function_call(llm_response)
-       
-        
+
         prediction_result = None
         final_response = llm_response
-        
+
         if is_function_call and params:
-         
-            
-            # Step 3: Make prediction
-          
-            prediction_value = await asyncio.to_thread(model_service.predict, params)
-           
-            
-            # Step 4: Format message based on language
-            if request.language.lower() in ['vi']:
-                print(" Vietnamese detected")
-                language_instruction = {
-                    "role": "system",
-                    "content": "Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh."
-                }
+            #  Make prediction
+            prediction_value = model_service.predict(params)
+
+            #  Format message based on language
+            if language.lower() == "vi":
+                print("Vietnamese detected")
                 assistant_message = (
-                     f"Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh. "
+                    f"Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh. "
                     f"Dựa trên các thông số chuyến đi của bạn, mô hình dự đoán đã tính toán "
                     f"mức tiêu thụ nhiên liệu là **{prediction_value:.2f} đơn vị**.\n\n"
                     f"Bây giờ để tôi giải thích ý nghĩa của kết quả này và những yếu tố nào đã ảnh hưởng đến dự đoán..."
                 )
                 elaboration_prompt = "Vui lòng giải thích chi tiết về dự đoán này với những thông tin hữu ích."
             else:
-                language_instruction = None
                 assistant_message = (
                     f"Based on your trip parameters, the prediction model calculated "
-                    f"a fuel consumption of **{prediction_value:.2f} litter**.\n\n"
+                    f"a fuel consumption of **{prediction_value:.2f} liters**.\n\n"
                     f"Now let me explain what this means and what factors influenced this prediction..."
                 )
                 elaboration_prompt = "Please elaborate on this prediction with helpful insights."
 
-            result_messages = []
+            result_messages = messages + [{"role": "assistant", "content": assistant_message}]
 
-            result_messages.extend(request.messages + [
-                {
-                    "role": "assistant",
-                    "content": assistant_message
-                }
-            ])
+            #  Get natural language explanation
+            elaboration_messages = result_messages + [{"role": "user", "content": elaboration_prompt}]
+            final_response = asyncio.run(llm_service.chat(elaboration_messages, language))
 
-            # Ask LLM to elaborate
-            elaboration_messages = result_messages + [
-                {
-                    "role": "user",
-                    "content": elaboration_prompt
-                }
-            ]
-            
-            
-            # Step 5: Get natural language explanation
-            print("language",request.language)
-          
-            final_response = await llm_service.chat(elaboration_messages, request.language)
-            print(result_messages)
-           
-            
             prediction_result = {
                 "fuel_consumption": prediction_value,
                 "parameters": params
             }
         else:
-            print(" No function call detected, returning original LLM response")
-        
-        print(f" Returning response - prediction_made: {is_function_call}")
-        return ChatWithPredictionResponse(
-            response=final_response,
-            prediction_made=is_function_call,
-            prediction_result=prediction_result
-        )
+            print("No function call detected, returning original LLM response")
+
+        print(f"Returning response - prediction_made: {is_function_call}")
+
+        return jsonify({
+            "response": final_response,
+            "prediction_made": is_function_call,
+            "prediction_result": prediction_result
+        }), 200
+
     except Exception as e:
-        print(f" ERROR: {str(e)}")
+        print(f"ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
+        raise InternalServerError(description=f"Prediction error: {str(e)}")
