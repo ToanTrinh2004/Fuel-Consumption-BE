@@ -1,0 +1,605 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #ffffff;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #1a1a1a;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1a;
+  --primary: #2002a6;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #1a1a1a;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #1a1a1a;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(227, 213, 247, 0.4);
+  --input: transparent;
+  --input-background: #fafafa;
+  --switch-background: #e5e5e5;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #2002a6;
+  --chart-1: #2002a6;
+  --chart-2: #5b47d9;
+  --chart-3: #8b7ae8;
+  --chart-4: #b8acf5;
+  --chart-5: #e3d5f7;
+  --radius: 0.625rem;
+  --sidebar: #fafafa;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-primary: #2002a6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f5f5f5;
+  --sidebar-accent-foreground: #1a1a1a;
+  --sidebar-border: rgba(227, 213, 247, 0.3);
+  --sidebar-ring: #2002a6;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #e5e5e5;
+  --card: #0a0a0a;
+  --card-foreground: #e5e5e5;
+  --popover: #0a0a0a;
+  --popover-foreground: #e5e5e5;
+  --primary: #e3d5f7;
+  --primary-foreground: #0a0a0a;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #e5e5e5;
+  --muted: #1a1a1a;
+  --muted-foreground: #a3a3a3;
+  --accent: #1a1a1a;
+  --accent-foreground: #e5e5e5;
+  --destructive: #d4183d;
+  --destructive-foreground: #e5e5e5;
+  --border: rgba(227, 213, 247, 0.15);
+  --input: rgba(227, 213, 247, 0.1);
+  --ring: #e3d5f7;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: #e3d5f7;
+  --chart-2: #b8acf5;
+  --chart-3: #8b7ae8;
+  --chart-4: #5b47d9;
+  --chart-5: #2002a6;
+  --sidebar: #0f0f0f;
+  --sidebar-foreground: #e5e5e5;
+  --sidebar-primary: #e3d5f7;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #e5e5e5;
+  --sidebar-border: rgba(227, 213, 247, 0.15);
+  --sidebar-ring: #e3d5f7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/**
+ * Base typography. This is not applied to elements which have an ancestor with a Tailwind text class.
+ */
+@layer base {
+  :where(:not(:has([class*=" text-"]), :not(:has([class^="text-"])))) {
+    h1 {
+      font-size: var(--text-2xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h2 {
+      font-size: var(--text-xl);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h3 {
+      font-size: var(--text-lg);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    h4 {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    p {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+
+    label {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    button {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-medium);
+      line-height: 1.5;
+    }
+
+    input {
+      font-size: var(--text-base);
+      font-weight: var(--font-weight-normal);
+      line-height: 1.5;
+    }
+  }
+}
+
+html {
+  font-size: var(--font-size);
+}
+
+/* Print Report Styles - Professional A4 Layout */
+.print-report {
+  display: none;
+}
+
+@media print {
+  /* Page setup - Professional A4 */
+  @page {
+    margin: 15mm;
+    size: A4 portrait;
+  }
+  
+  /* Hide everything except print report */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Show only print report */
+  .print-report {
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  [data-print-report] {
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  [data-print-report] * {
+    visibility: visible !important;
+  }
+  
+  /* Page structure */
+  .print-page {
+    width: 100%;
+    height: 277mm; /* A4 height minus margins */
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    position: relative;
+    background: white;
+    color: black;
+    page-break-after: always;
+  }
+  
+  .print-page:last-child {
+    page-break-after: auto;
+  }
+  
+  .page-break {
+    page-break-before: always;
+  }
+  
+  /* Headers */
+  .print-header {
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+  
+  .print-header-small {
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+  
+  /* Footer */
+  .print-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding-top: 8px;
+    border-top: 1px solid #e5e7eb;
+  }
+  
+  /* Reset for print */
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  /* Text sizes for print */
+  [data-print-report] h1 {
+    font-size: 16pt;
+    line-height: 1.3;
+  }
+  
+  [data-print-report] h2 {
+    font-size: 12pt;
+    line-height: 1.3;
+  }
+  
+  [data-print-report] .text-xs {
+    font-size: 8pt;
+  }
+  
+  [data-print-report] .text-sm {
+    font-size: 9pt;
+  }
+  
+  [data-print-report] .text-base {
+    font-size: 10pt;
+  }
+  
+  [data-print-report] .text-lg {
+    font-size: 11pt;
+  }
+  
+  [data-print-report] .text-xl {
+    font-size: 13pt;
+  }
+  
+  [data-print-report] .text-2xl {
+    font-size: 16pt;
+  }
+  
+  /* Charts */
+  [data-print-report] .recharts-wrapper {
+    background: transparent !important;
+  }
+  
+  [data-print-report] .recharts-surface {
+    background: white !important;
+  }
+  
+  /* Ensure grids work */
+  [data-print-report] .grid {
+    display: grid !important;
+  }
+  
+  [data-print-report] .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  
+  [data-print-report] .grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+  
+  /* Colors for print */
+  [data-print-report] .bg-gray-50 {
+    background-color: #f9fafb !important;
+  }
+  
+  [data-print-report] .bg-blue-50 {
+    background-color: #eff6ff !important;
+  }
+  
+  [data-print-report] .border-gray-200 {
+    border-color: #e5e7eb !important;
+  }
+  
+  [data-print-report] .border-blue-200 {
+    border-color: #bfdbfe !important;
+  }
+  
+  [data-print-report] .border-gray-300 {
+    border-color: #d1d5db !important;
+  }
+  
+  [data-print-report] .text-gray-500 {
+    color: #6b7280 !important;
+  }
+  
+  [data-print-report] .text-gray-600 {
+    color: #4b5563 !important;
+  }
+  
+  [data-print-report] .text-gray-800 {
+    color: #1f2937 !important;
+  }
+  
+  [data-print-report] .text-gray-900 {
+    color: #111827 !important;
+  }
+}
+
+/* Fallback - Old dashboard print (if print report not available) */
+@media print {
+  
+  /* Reset page and body */
+  html, body {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: white !important;
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+  
+  /* Hide everything by default */
+  body * {
+    visibility: hidden !important;
+  }
+  
+  /* Show only dashboard and its children */
+  [data-print-dashboard],
+  [data-print-dashboard] * {
+    visibility: visible !important;
+  }
+  
+  /* Position dashboard for print - FILL ENTIRE PAGE with auto-scaling */
+  [data-print-dashboard] {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 190mm !important;  /* A4 width minus margins */
+    max-width: 190mm !important;
+    overflow: visible !important;
+    background: white !important;
+    color: black !important;
+    padding: 6mm !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    transform-origin: top center !important;
+    
+    /* Dynamic scale based on content - fallback to 0.75 for tight fit */
+    transform: scale(var(--print-scale, 0.75)) !important;
+  }
+  
+  /* Force colors for print */
+  [data-print-dashboard] * {
+    color: #1a1a1a !important;
+    border-color: #d1d5db !important;
+    background: white !important;
+  }
+  
+  /* Keep card backgrounds visible */
+  [data-print-dashboard] .border-2,
+  [data-print-dashboard] [class*="rounded"] {
+    background: #fafafa !important;
+    border-color: #e5e5e5 !important;
+  }
+  
+  /* Keep chart colors visible */
+  [data-print-dashboard] svg,
+  [data-print-dashboard] svg * {
+    color: inherit !important;
+    fill: currentColor !important;
+  }
+  
+  /* Recharts specific - smaller for full page fit */
+  [data-print-dashboard] .recharts-wrapper,
+  [data-print-dashboard] .recharts-surface {
+    background: transparent !important;
+  }
+  
+  [data-print-dashboard] .recharts-cartesian-axis-tick-value,
+  [data-print-dashboard] .recharts-legend-item-text {
+    fill: #1a1a1a !important;
+    font-size: 9px !important;
+  }
+  
+  /* Compact vertical layout for single page */
+  [data-print-dashboard] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2mm !important;
+  }
+  
+  /* Cards compact sizing with flex */
+  [data-print-dashboard] [class*="Card"] {
+    flex-shrink: 1 !important;
+    min-height: 0 !important;
+  }
+  
+  /* Motion divs should not add extra space */
+  [data-print-dashboard] > div {
+    margin: 0 !important;
+  }
+  
+  /* Hide interactive buttons in print */
+  [data-print-dashboard] button:not(.recharts-legend-item) {
+    display: none !important;
+  }
+  
+  /* Clean up shadows and rounded corners for print */
+  [data-print-dashboard],
+  [data-print-dashboard] * {
+    box-shadow: none !important;
+  }
+  
+  /* Ensure grid layouts work properly */
+  [data-print-dashboard] .grid {
+    display: grid !important;
+  }
+  
+  /* Responsive containers - very compact for single page fit */
+  [data-print-dashboard] .recharts-responsive-container {
+    width: 100% !important;
+    height: 140px !important;
+    min-height: 140px !important;
+    max-height: 140px !important;
+  }
+  
+  /* Motion elements should not animate in print */
+  [data-print-dashboard] [class*="motion"] {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  
+  /* Ensure print header is visible but compact */
+  [data-print-dashboard] .print\:block {
+    display: block !important;
+    margin-bottom: 4mm !important;
+    padding-bottom: 3mm !important;
+  }
+  
+  /* Grid layouts in print - more compact */
+  [data-print-dashboard] .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 3mm !important;
+  }
+  
+  [data-print-dashboard] .md\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 3mm !important;
+  }
+  
+  /* Compact text sizes for single page fit */
+  [data-print-dashboard] .text-xs {
+    font-size: 8px !important;
+    line-height: 1.3 !important;
+  }
+  
+  [data-print-dashboard] .text-sm {
+    font-size: 9px !important;
+    line-height: 1.3 !important;
+  }
+  
+  [data-print-dashboard] .text-base {
+    font-size: 10px !important;
+    line-height: 1.3 !important;
+  }
+  
+  [data-print-dashboard] .text-lg {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+  
+  [data-print-dashboard] .text-xl {
+    font-size: 12px !important;
+    line-height: 1.3 !important;
+  }
+  
+  [data-print-dashboard] .text-2xl {
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+  }
+  
+  /* Very compact padding and margins for single page */
+  [data-print-dashboard] .p-2,
+  [data-print-dashboard] .p-2\.5,
+  [data-print-dashboard] .p-3,
+  [data-print-dashboard] .p-4 {
+    padding: 1.5mm !important;
+  }
+  
+  [data-print-dashboard] .pt-3,
+  [data-print-dashboard] .pt-4 {
+    padding-top: 1.5mm !important;
+  }
+  
+  [data-print-dashboard] .pb-1,
+  [data-print-dashboard] .pb-2,
+  [data-print-dashboard] .pb-3 {
+    padding-bottom: 1mm !important;
+  }
+  
+  [data-print-dashboard] .gap-1,
+  [data-print-dashboard] .gap-1\.5,
+  [data-print-dashboard] .gap-2,
+  [data-print-dashboard] .gap-3 {
+    gap: 1.5mm !important;
+  }
+  
+  [data-print-dashboard] .mb-1,
+  [data-print-dashboard] .mb-2 {
+    margin-bottom: 1mm !important;
+  }
+  
+  [data-print-dashboard] .mt-0\.5,
+  [data-print-dashboard] .mt-1 {
+    margin-top: 0.5mm !important;
+  }
+  
+  /* Ensure borders are visible but thin */
+  [data-print-dashboard] .border,
+  [data-print-dashboard] .border-2 {
+    border-width: 0.5px !important;
+    border-style: solid !important;
+  }
+  
+  /* CardHeader compact */
+  [data-print-dashboard] [class*="CardHeader"] {
+    padding: 2mm !important;
+  }
+  
+  [data-print-dashboard] [class*="CardContent"] {
+    padding: 2mm !important;
+  }
+  
+  /* Icons smaller */
+  [data-print-dashboard] svg:not(.recharts-surface svg) {
+    width: 12px !important;
+    height: 12px !important;
+  }
+}

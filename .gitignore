@@ -29,4 +29,5 @@ tmp/
 *.db
 
 templates/
-
+# Node.js dependencies
+node_modules/
