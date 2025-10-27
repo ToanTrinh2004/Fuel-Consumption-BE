@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from functools import wraps
 from typing import Any, Callable, ParamSpec, TypeVar
 
@@ -21,7 +22,7 @@ def _get_serializer() -> URLSafeTimedSerializer:
 
 
 def issue_token(user: User) -> str:
-    payload = {"sub": user.id, "email": user.email}
+    payload = {"sub": str(user.id), "email": user.email}
     return _get_serializer().dumps(payload)
 
 
@@ -51,7 +52,12 @@ def token_required(func: Callable[P, R]) -> Callable[P, R]:
         if not user_id:
             return jsonify({"error": "Token khong hop le"}), 401  # type: ignore[return-value]
 
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Token khong hop le"}), 401  # type: ignore[return-value]
+
+        user = User.query.get(user_uuid)
         if not user:
             return jsonify({"error": "Nguoi dung khong ton tai"}), 401  # type: ignore[return-value]
 

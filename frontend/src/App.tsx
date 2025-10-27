@@ -4,6 +4,7 @@ import RegisterForm from './components/RegisterForm';
 import ChatBot from './components/ChatBot';
 import AdminDashboard from './components/AdminDashboard';
 import { Toaster } from './components/ui/sonner';
+import { authService } from './services/api/auth';
 
 export type ThemeColor = 'default' | 'pink' | 'blue' | 'purple' | 'ocean' | 'sunset' | 'emerald' | 'rose' | 'indigo' | 'teal' | 'amber' | 'lime' | 'fuchsia' | 'sky' | 'custom';
 export type Language = 'vi' | 'en';
@@ -20,14 +21,20 @@ export default function App() {
   useEffect(() => {
     const user = localStorage.getItem('currentUser');
     const userEmail = localStorage.getItem('currentUserEmail');
+    const token = localStorage.getItem('fluxmare_token');
     const savedTheme = localStorage.getItem('themeColor') as ThemeColor;
     const savedDarkMode = localStorage.getItem('isDarkMode');
     const savedCustomColor = localStorage.getItem('customColor');
     const savedLanguage = localStorage.getItem('language') as Language;
-    if (user) {
+    if (!token) {
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('currentUserEmail');
+    }
+
+    if (user && token) {
       setCurrentUser(user);
     }
-    if (userEmail) {
+    if (userEmail && token) {
       setCurrentUserEmail(userEmail);
     }
     if (savedTheme) {
@@ -44,30 +51,59 @@ export default function App() {
     }
   }, []);
 
-  const handleLogin = (usernameOrEmail: string, password?: string) => {
-    // Check admin account
-    if (usernameOrEmail === 'fluxmare_admin@gmail.com' && password === '19062004') {
+  const handleLogin = async (usernameOrEmail: string, password?: string) => {
+    const email = usernameOrEmail.trim().toLowerCase();
+    const adminEmail = 'fluxmare_admin@gmail.com';
+    const adminPassword = '19062004';
+
+    if (!password) {
+      throw new Error('Vui lòng nhập mật khẩu.');
+    }
+
+    if (email === adminEmail && password === adminPassword) {
       setCurrentUser('admin');
-      setCurrentUserEmail('fluxmare_admin@gmail.com');
+      setCurrentUserEmail(adminEmail);
       localStorage.setItem('currentUser', 'admin');
-      localStorage.setItem('currentUserEmail', 'fluxmare_admin@gmail.com');
+      localStorage.setItem('currentUserEmail', adminEmail);
+      localStorage.setItem('fluxmare_token', 'admin-session');
       return;
     }
 
-    // Regular user login
-    setCurrentUser(usernameOrEmail);
-    setCurrentUserEmail(usernameOrEmail);
-    localStorage.setItem('currentUser', usernameOrEmail);
-    localStorage.setItem('currentUserEmail', usernameOrEmail);
+    try {
+      const { access_token } = await authService.login({ email, password });
+      localStorage.setItem('fluxmare_token', access_token);
+      setCurrentUser(email);
+      setCurrentUserEmail(email);
+      localStorage.setItem('currentUser', email);
+      localStorage.setItem('currentUserEmail', email);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Đăng nhập thất bại. Vui lòng thử lại.');
+    }
   };
 
-  const handleRegister = (username: string, email: string, password: string) => {
-    localStorage.setItem(`user_${username}`, password);
-    localStorage.setItem(`email_${username}`, email);
-    setCurrentUser(username);
-    setCurrentUserEmail(email);
-    localStorage.setItem('currentUser', username);
-    localStorage.setItem('currentUserEmail', email);
+  const handleRegister = async (username: string, email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const fullName = username.trim();
+    try {
+      const { access_token } = await authService.register({
+        email: normalizedEmail,
+        password,
+        fullName: fullName || undefined,
+      });
+      localStorage.setItem('fluxmare_token', access_token);
+      setCurrentUser(fullName || normalizedEmail);
+      setCurrentUserEmail(normalizedEmail);
+      localStorage.setItem('currentUser', fullName || normalizedEmail);
+      localStorage.setItem('currentUserEmail', normalizedEmail);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Đăng ký thất bại. Vui lòng thử lại.');
+    }
   };
 
   const handleLogout = () => {
@@ -75,6 +111,7 @@ export default function App() {
     setCurrentUserEmail(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentUserEmail');
+    localStorage.removeItem('fluxmare_token');
   };
 
   const handleChangeTheme = (theme: ThemeColor) => {

@@ -8,7 +8,7 @@ import GoogleIcon from './GoogleIcon';
 import fluxmareLogo from 'figma:asset/48159e3c19318e6ee94d6f46a7da4911deba57ae.png';
 
 interface LoginFormProps {
-  onLogin: (usernameOrEmail: string, password: string) => void;
+  onLogin: (usernameOrEmail: string, password: string) => Promise<void>;
   onToggleForm: () => void;
   isDarkMode: boolean;
   accentColor?: string;
@@ -19,11 +19,26 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (usernameOrEmail && password) {
-      onLogin(usernameOrEmail, password);
+    if (!usernameOrEmail || !password) {
+      setErrorMessage('Vui lòng nhập email và mật khẩu.');
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await onLogin(usernameOrEmail, password);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Đăng nhập thất bại. Vui lòng thử lại.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -115,6 +130,7 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
                   type="text"
                   value={usernameOrEmail}
                   onChange={(e) => setUsernameOrEmail(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 h-10 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -148,6 +164,7 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 pr-11 h-10 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -164,6 +181,7 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
                   className={`absolute right-3 top-1/2 -translate-y-1/2 ${
                     isDarkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
                   } transition-colors`}
@@ -203,6 +221,17 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
               </button>
             </motion.div>
 
+            {errorMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+              >
+                {errorMessage}
+              </motion.div>
+            )}
+
             {/* Login Button */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -215,11 +244,13 @@ export default function LoginForm({ onLogin, onToggleForm, isDarkMode, accentCol
                 style={{
                   backgroundColor: primaryColor,
                 }}
+                disabled={isSubmitting}
+                aria-busy={isSubmitting}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = lighterColor}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = primaryColor}
               >
                 <LogIn className="h-5 w-5 mr-2" />
-                Đăng nhập
+                {isSubmitting ? 'Đang xử lý…' : 'Đăng nhập'}
               </Button>
             </motion.div>
 
