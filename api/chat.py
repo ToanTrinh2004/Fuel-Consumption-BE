@@ -61,7 +61,6 @@ def _conversation_to_dict(
 
 
 @chat_bp.route("/conversations", methods=["POST"])
-@token_required
 def create_conversation(current_user: User):
     payload = request.get_json(silent=True) or {}
 
