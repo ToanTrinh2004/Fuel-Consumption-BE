@@ -14,14 +14,15 @@ interface ChatHistoryProps {
   conversations: Conversation[];
   activeConversationId: string | null;
   username: string;
-  onSelectConversation: (conversationId: string) => void;
-  onNewConversation: () => void;
-  onClearHistory: () => void;
-  onToggleFavorite: (conversationId: string) => void;
-  onDeleteConversation: (conversationId: string) => void;
+  onSelectConversation: (conversationId: string) => void | Promise<void>;
+  onNewConversation: () => void | Promise<void>;
+  onClearHistory: () => void | Promise<void>;
+  onToggleFavorite: (conversationId: string) => void | Promise<void>;
+  onDeleteConversation: (conversationId: string) => void | Promise<void>;
   themeColor: ThemeColor;
   isDarkMode: boolean;
   customColor?: string;
+  isLoading?: boolean;
 }
 
 export default function ChatHistory({ 
@@ -35,7 +36,8 @@ export default function ChatHistory({
   onDeleteConversation,
   themeColor,
   isDarkMode,
-  customColor
+  customColor,
+  isLoading = false
 }: ChatHistoryProps) {
   const [displayCount, setDisplayCount] = useState(5);
   const [searchTerm, setSearchTerm] = useState('');
@@ -237,7 +239,14 @@ export default function ChatHistory({
       {/* Scrollable conversations - SCROLLABLE */}
       <ScrollArea className={`flex-1 p-2 ${colors.bg}`}>
         <div className="space-y-2">
-          {filteredConversations.length === 0 ? (
+          {isLoading ? (
+            <div
+              className="text-center py-8 text-xs"
+              style={{ color: getSecondaryTextColor(isDarkMode, themeColor, customColor) }}
+            >
+              Dang tai cuoc tro chuyen...
+            </div>
+          ) : filteredConversations.length === 0 ? (
             <motion.div 
               className="text-center py-8"
               initial={{ opacity: 0 }}

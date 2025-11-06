@@ -1,50 +1,110 @@
 import apiClient from './client';
-import type { ChatMessage, PredictionData } from '@/shared/types';
 
-interface SendMessageRequest {
-  userId: string;
-  message: string;
-  features?: {
-    vessel_type: string;
-    speed_calc: number;
-    distance: number;
-    datetime: string;
-    draft_aft?: number;
-    draft_fore?: number;
-    average_draft?: number;
-  };
+export interface ConversationMessageDTO {
+  id: number;
+  conversation_id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string;
 }
 
-interface SendMessageResponse {
-  success: boolean;
-  prediction: PredictionData;
-  messageId: string;
+export interface ConversationDTO {
+  id: number;
+  title: string;
+  user_id: string;
+  created_at?: string;
+  updated_at?: string;
+  last_message?: ConversationMessageDTO | null;
+  messages?: ConversationMessageDTO[] | null;
 }
 
-interface ChatHistoryResponse {
-  success: boolean;
-  messages: ChatMessage[];
+export interface ChatCompletionMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatCompletionRequest {
+  conversationId?: string | number;
+  messages: ChatCompletionMessage[];
+  language?: string;
+  context?: ChatCompletionMessage[];
+}
+
+export interface ChatCompletionResponse {
+  response: string;
+  prediction_made: boolean;
+  prediction_result?: {
+    fuel_consumption?: number;
+    parameters?: Record<string, unknown>;
+  } | null;
+  message?: ConversationMessageDTO | null;
+}
+
+interface ConversationsListResponse {
+  items: ConversationDTO[];
   total: number;
 }
 
+interface MessagesListResponse {
+  items: ConversationMessageDTO[];
+}
+
+interface DeleteAllResponse {
+  deleted: number;
+}
+
 export const chatService = {
-  async sendMessage(request: SendMessageRequest): Promise<SendMessageResponse> {
-    const response = await apiClient.post<SendMessageResponse>('/chat/predict', request);
+  async listConversations(): Promise<ConversationDTO[]> {
+    const response = await apiClient.get<ConversationsListResponse>('/chat/conversations');
+    return response.data.items ?? [];
+  },
+
+  async createConversation(title?: string): Promise<ConversationDTO> {
+    const response = await apiClient.post<ConversationDTO>('/chat/conversations', {
+      title,
+    });
     return response.data;
   },
 
-  async getChatHistory(userId: string, limit: number = 50): Promise<ChatMessage[]> {
-    const response = await apiClient.get<ChatHistoryResponse>('/chat/history', {
-      params: { userId, limit },
-    });
-    return response.data.messages;
+  async getConversation(conversationId: string | number): Promise<ConversationDTO> {
+    const response = await apiClient.get<ConversationDTO>(`/chat/conversations/${conversationId}`);
+    return response.data;
   },
 
-  async deleteChatHistory(userId: string): Promise<void> {
-    await apiClient.delete(`/chat/history/${userId}`);
+  async listMessages(conversationId: string | number): Promise<ConversationMessageDTO[]> {
+    const response = await apiClient.get<MessagesListResponse>(`/chat/conversations/${conversationId}/messages`);
+    return response.data.items ?? [];
   },
 
-  async deleteMessage(messageId: string): Promise<void> {
-    await apiClient.delete(`/chat/messages/${messageId}`);
+  async createMessage(
+    conversationId: string | number,
+    payload: { role: 'user' | 'assistant'; content: string; metadata?: Record<string, unknown> | null }
+  ): Promise<ConversationMessageDTO> {
+    const response = await apiClient.post<ConversationMessageDTO>(
+      `/chat/conversations/${conversationId}/messages`,
+      payload
+    );
+    return response.data;
+  },
+
+  async chat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    const payload = {
+      conversation_id: request.conversationId,
+      messages: request.messages,
+      language: request.language,
+      context: request.context,
+    };
+    const response = await apiClient.post<ChatCompletionResponse>('/chat/chat', payload);
+    return response.data;
+  },
+
+  async deleteConversation(conversationId: string | number): Promise<void> {
+    await apiClient.delete(`/chat/conversations/${conversationId}`);
+  },
+
+  async deleteAllConversations(): Promise<number> {
+    const response = await apiClient.delete<DeleteAllResponse>('/chat/conversations');
+    return response.data.deleted ?? 0;
   },
 };

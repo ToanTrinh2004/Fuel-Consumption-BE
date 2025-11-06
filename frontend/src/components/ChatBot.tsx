@@ -10,13 +10,15 @@ import HelpDialog from './HelpDialog';
 import { Button } from './ui/button';
 import { LogOut, BarChart3, Sparkles, Download, Lightbulb, PanelLeftClose, PanelLeft, Sun, Moon, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { mockDatabase, Conversation, MockMessage, smartSuggestions } from '../utils/mockData';
+import type { Conversation, MockMessage } from '../utils/mockData';
+import { smartSuggestions } from '../utils/mockData';
 import { toast } from 'sonner@2.0.3';
 import { Resizable } from 're-resizable';
 import { ThemeColor, Language } from '../App';
 import fluxmareLogo from 'figma:asset/48159e3c19318e6ee94d6f46a7da4911deba57ae.png';
 import { getLogoFilter, getLogoOpacity } from '../utils/logoUtils';
 import { t } from '../utils/translations';
+import { chatService, ChatCompletionMessage, ConversationDTO, ConversationMessageDTO } from '../services/api/chat';
 
 interface ChatBotProps {
   username: string;
@@ -48,20 +50,34 @@ const getContrastColor = (hexColor: string): string => {
   return luminance > 0.5 ? '#0a0a0a' : '#ffffff';
 };
 
+const normalizeNumber = (value: unknown, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 // Helper function for generating mock fuel data
-const generateMockFuelData = (features: any) => {
-  const base = 0.15 + (features.speedOverGround / 100) * 0.05;
+const generateMockFuelData = (features: any = {}) => {
+  const speedOverGround = normalizeNumber(features.speedOverGround, 12);
+  const windSpeed10M = normalizeNumber(features.windSpeed10M, 10);
+  const waveHeight = normalizeNumber(features.waveHeight, 1.5);
+  const wavePeriod = normalizeNumber(features.wavePeriod, 8);
+  const seaFloorDepth = normalizeNumber(features.seaFloorDepth, 120);
+  const temperature2M = normalizeNumber(features.temperature2M, 24);
+  const oceanCurrentVelocity = normalizeNumber(features.oceanCurrentVelocity, 1.2);
+
+  const base = 0.15 + (speedOverGround / 100) * 0.05;
   const predictions = [];
   
   for (let i = 0; i < 96; i++) {
     const timeVariation = Math.sin(i / 10) * 0.02;
     const randomness = (Math.random() - 0.5) * 0.01;
-    const depthFactor = (features.seaFloorDepth / 1000) * 0.005;
-    const tempFactor = (features.temperature2M / 30) * 0.003;
-    const windFactor = (features.windSpeed10M / 20) * 0.008;
-    const waveFactor = (features.waveHeight / 5) * 0.006;
+    const depthFactor = (seaFloorDepth / 1000) * 0.005;
+    const tempFactor = (temperature2M / 30) * 0.003;
+    const windFactor = (windSpeed10M / 20) * 0.008;
+    const waveFactor = (waveHeight / 5) * 0.006;
+    const currentFactor = (oceanCurrentVelocity / 5) * 0.004;
     
-    const fuelConsumption = base + timeVariation + randomness + depthFactor + tempFactor + windFactor + waveFactor;
+    const fuelConsumption = base + timeVariation + randomness + depthFactor + tempFactor + windFactor + waveFactor + currentFactor;
     
     predictions.push({
       timestamp: i,
@@ -73,8 +89,140 @@ const generateMockFuelData = (features: any) => {
   return predictions;
 };
 
+type ConversationState = Conversation & { hasLoadedHistory?: boolean };
+
+const mapApiMessageToMock = (message: ConversationMessageDTO): MockMessage => ({
+  id: String(message.id),
+  type: message.role === 'assistant' ? 'bot' : 'user',
+  content: message.content,
+  timestamp: message.created_at ? new Date(message.created_at) : new Date(),
+  metadata: message.metadata ?? undefined,
+});
+
+const mapApiConversationToState = (conversation: ConversationDTO): ConversationState => {
+  const messages = conversation.messages
+    ? conversation.messages.map(mapApiMessageToMock)
+    : conversation.last_message
+      ? [mapApiMessageToMock(conversation.last_message)]
+      : [];
+
+  const timestamp =
+    conversation.updated_at ||
+    conversation.created_at ||
+    new Date().toISOString();
+
+  return {
+    id: String(conversation.id),
+    title: conversation.title || 'Cuoc tro chuyen',
+    messages,
+    timestamp: new Date(timestamp),
+    isFavorite: false,
+    hasLoadedHistory: Boolean(conversation.messages),
+  };
+};
+
+const sortConversations = (items: ConversationState[]) =>
+  [...items].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+const buildDashboardData = (formData: any, predictionValue?: number) => {
+  if (!formData) return null;
+
+  const predictions = generateMockFuelData(formData);
+  const stats = {
+    average: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0) / predictions.length,
+    max: Math.max(...predictions.map(p => p.fuelConsumption)),
+    min: Math.min(...predictions.map(p => p.fuelConsumption)),
+    total: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0),
+  };
+
+  const timeSeriesData = predictions.map(p => ({
+    time: p.time,
+    consumption: p.fuelConsumption,
+    speed: normalizeNumber(formData.speedOverGround, 12),
+  }));
+
+  const comparison = [
+    { metric: 'Speed', current: normalizeNumber(formData.speedOverGround, 12), optimal: 10 },
+    { metric: 'Wave Impact', current: normalizeNumber(formData.waveHeight, 2), optimal: 1.2 },
+    { metric: 'Wind Impact', current: normalizeNumber(formData.windSpeed10M, 8), optimal: 6 },
+  ];
+
+  const totalKg = predictionValue ?? stats.total * 900;
+
+  return {
+    query: formData.query || 'Fluxmare Fuel Insight',
+    analysis: {
+      fuelConsumption: totalKg,
+      fuelConsumptionTons: totalKg / 1000,
+      estimatedCost: (totalKg / 1000) * 620,
+      efficiency: Math.max(
+        0,
+        Math.min(
+          100,
+          100 -
+            (normalizeNumber(formData.waveHeight, 2) * 5 +
+              normalizeNumber(formData.windSpeed10M, 8) * 2)
+        )
+      ),
+      avgConsumptionRate: stats.average,
+      recommendation:
+        normalizeNumber(formData.speedOverGround, 12) > 11
+          ? 'Giam toc do de toi uu nhien lieu'
+          : 'Duy tri toc do hien tai de giu hieu qua',
+    },
+    vesselInfo: {
+      type: formData.vesselType || 'container_1_tier1',
+      speedCalc: normalizeNumber(formData.speedOverGround, 12),
+      distance: normalizeNumber(formData.speedOverGround, 12) * 24,
+      datetime: new Date().toISOString(),
+    },
+    timeSeriesData,
+    comparison,
+    timestamp: new Date(),
+    inputFeatures: {
+      Ship_SpeedOverGround: normalizeNumber(formData.speedOverGround, 12),
+      Weather_WindSpeed10M: normalizeNumber(formData.windSpeed10M, 10),
+      Weather_WaveHeight: normalizeNumber(formData.waveHeight, 1.5),
+      Weather_WavePeriod: normalizeNumber(formData.wavePeriod, 8),
+      Environment_SeaFloorDepth: normalizeNumber(formData.seaFloorDepth, 120),
+      Weather_Temperature2M: normalizeNumber(formData.temperature2M, 24),
+      Weather_OceanCurrentVelocity: normalizeNumber(formData.oceanCurrentVelocity, 1.2),
+    },
+    prediction: {
+      Total_MomentaryFuel: (predictionValue ?? stats.average) / 3600,
+    },
+  };
+};
+
+const buildContextMessages = (formData: any, language: Language): ChatCompletionMessage[] => {
+  if (!formData) return [];
+
+  const prefix =
+    language === 'vi'
+      ? 'Nguoi dung vua cung cap thong tin thong qua form dau vao (JSON):'
+      : 'The user provided the following structured form inputs (JSON):';
+
+  return [
+    {
+      role: 'system',
+      content: `${prefix} ${JSON.stringify(formData)}`,
+    },
+  ];
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const payload = error as Record<string, unknown>;
+    if (typeof payload.error === 'string') return payload.error;
+    if (typeof payload.message === 'string') return payload.message;
+  }
+  return 'Da co loi xay ra. Vui long thu lai.';
+};
+
 export default function ChatBot({ username, onLogout, themeColor, isDarkMode, customColor, language, onChangeTheme, onToggleDarkMode, onChangeCustomColor, onChangeLanguage }: ChatBotProps) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationState[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [fuelPredictionData, setFuelPredictionData] = useState<any>(null);
@@ -83,47 +231,94 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
   const [showDashboardHistory, setShowDashboardHistory] = useState(false);
   const [isComparisonMode, setIsComparisonMode] = useState(false);
   const [isFullscreenDashboard, setIsFullscreenDashboard] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [loadingConversationId, setLoadingConversationId] = useState<string | null>(null);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const messages = activeConversation?.messages || [];
+  const isActiveConversationLoading =
+    loadingConversationId !== null && loadingConversationId === activeConversationId;
+  const isInputBusy = isSendingMessage || isActiveConversationLoading;
 
   useEffect(() => {
-    // Load conversations from localStorage
-    const savedData = localStorage.getItem(`conversations_${username}`);
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      const conversationsWithDates = parsed.map((conv: any) => ({
-        ...conv,
-        timestamp: new Date(conv.timestamp),
-        messages: conv.messages.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }))
-      }));
-      // Remove duplicates by ID
-      const uniqueConversations = conversationsWithDates.filter((conv: Conversation, index: number, self: Conversation[]) => 
-        index === self.findIndex((c) => c.id === conv.id)
-      );
-      setConversations(uniqueConversations);
-      if (uniqueConversations.length > 0) {
-        setActiveConversationId(uniqueConversations[0].id);
+    let ignore = false;
+
+    const fetchConversations = async () => {
+      setIsLoadingConversations(true);
+      try {
+        const items = await chatService.listConversations();
+        if (ignore) {
+          return;
+        }
+        const mapped = sortConversations(items.map(mapApiConversationToState));
+        setConversations(mapped);
+        setActiveConversationId(prev => {
+          if (mapped.length === 0) {
+            return null;
+          }
+          return prev ?? mapped[0].id;
+        });
+      } catch (error) {
+        if (!ignore) {
+          toast.error('Khong the tai danh sach cuoc tro chuyen', {
+            description: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (!ignore) {
+          setIsLoadingConversations(false);
+        }
       }
-    } else if (mockDatabase[username]) {
-      // Load mock data if available
-      setConversations(mockDatabase[username].conversations);
-      if (mockDatabase[username].conversations.length > 0) {
-        setActiveConversationId(mockDatabase[username].conversations[0].id);
-      }
-    }
+    };
+
+    fetchConversations();
+
+    return () => {
+      ignore = true;
+    };
   }, [username]);
-
-  useEffect(() => {
-    if (conversations.length > 0) {
-      localStorage.setItem(`conversations_${username}`, JSON.stringify(conversations));
-    }
-  }, [conversations, username]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const conversationId = activeConversationId;
+    if (!conversationId) {
+      return;
+    }
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (!conversation || conversation.hasLoadedHistory || loadingConversationId === conversationId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMessages = async () => {
+      setLoadingConversationId(conversationId);
+      try {
+        await refreshConversationMessages(conversationId);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error('Khong the tai tin nhan', {
+            description: getErrorMessage(error),
+          });
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingConversationId(prev => (prev === conversationId ? null : prev));
+        }
+      }
+    };
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationId, conversations, loadingConversationId]);
 
   const generateBotResponse = (userMessage: string): string => {
     const responses = [
@@ -150,148 +345,233 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     return responses[Math.floor(Math.random() * responses.length)];
   };
 
-  const handleSendMessage = (content: string, formData: any) => {
-    const startTime = Date.now();
-    
-    // Check if form data with 10 features
-    const hasValidFeatures = formData && formData.speedOverGround !== undefined;
-    
-    const userMessage: MockMessage = {
-      id: Date.now().toString(),
-      type: 'user',
-      content,
-      timestamp: new Date()
-    };
-
-    let currentConvId = activeConversationId;
-
-    if (!currentConvId || !activeConversation) {
-      // Check if conversation with same title already exists (avoid duplicates)
-      const title = content.slice(0, 50) + (content.length > 50 ? '...' : '');
-      const existingConv = conversations.find(c => c.title === title && c.messages.length === 0);
-      
-      if (existingConv) {
-        // Use existing empty conversation
-        currentConvId = existingConv.id;
-        setActiveConversationId(existingConv.id);
-        setConversations(prev => prev.map(conv => 
-          conv.id === currentConvId 
-            ? { ...conv, messages: [userMessage], timestamp: new Date() }
-            : conv
-        ));
-      } else {
-        // Create new conversation
-        const newConv: Conversation = {
-          id: `conv-${Date.now()}`,
-          title,
-          timestamp: new Date(),
-          messages: [userMessage],
-          isFavorite: false
-        };
-        setConversations(prev => [newConv, ...prev]);
-        setActiveConversationId(newConv.id);
-        currentConvId = newConv.id;
-      }
-    } else {
-      // Add to existing conversation
-      setConversations(prev => prev.map(conv => 
-        conv.id === currentConvId 
-          ? { ...conv, messages: [...conv.messages, userMessage], timestamp: new Date() }
+  const refreshConversationMessages = async (conversationId: string) => {
+    const latestMessages = await chatService.listMessages(conversationId);
+    const mappedMessages = latestMessages.map(mapApiMessageToMock);
+    setConversations(prev =>
+      prev.map(conv =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              messages: mappedMessages,
+              hasLoadedHistory: true,
+              timestamp: mappedMessages.length
+                ? mappedMessages[mappedMessages.length - 1].timestamp
+                : conv.timestamp,
+            }
           : conv
-      ));
+      )
+    );
+  };
+
+  const handleSendMessage = async (content: string, formData: any) => {
+    const trimmedContent = content.trim();
+    if (!trimmedContent || isSendingMessage) {
+      return;
     }
 
-    setTimeout(() => {
-      const responseTime = Date.now() - startTime;
-      let botContent = '';
-      let newFuelData = null;
-      let isFuelPred = false;
-      
-      if (hasValidFeatures) {
-        // Generate prediction from 10 features
-        const predictions = generateMockFuelData(formData);
-        const stats = {
-          average: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0) / predictions.length,
-          max: Math.max(...predictions.map(p => p.fuelConsumption)),
-          min: Math.min(...predictions.map(p => p.fuelConsumption)),
-          total: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0)
-        };
-        
-        // Transform predictions to time series data for dashboard
-        const timeSeriesData = predictions.map(p => ({
-          time: p.time,
-          consumption: p.fuelConsumption,
-          speed: formData.speedOverGround
-        }));
+    let conversationId = activeConversationId;
+    let conversationState = conversations.find(conv => conv.id === conversationId);
+    const tempUserId = `temp-${Date.now()}`;
+    let tempAssistantId: string | null = null;
 
-        // Create comparison data
-        const comparison = [
-          { metric: 'Speed', current: formData.speedOverGround, optimal: 8.5 },
-          { metric: 'Wave Impact', current: formData.waveHeight, optimal: 2.0 },
-          { metric: 'Wind Impact', current: formData.windSpeed10M, optimal: 10.0 }
-        ];
+    try {
+      setIsSendingMessage(true);
+      setShowSuggestions(false);
 
-        const totalKg = stats.total * 900; // total kg/s × 900 seconds per 15-min interval
-        
-        newFuelData = {
-          query: `Speed ${formData.speedOverGround} m/s, Depth ${formData.seaFloorDepth} m, Temp ${formData.temperature2M}°C`,
-          analysis: {
-            fuelConsumption: totalKg,
-            fuelConsumptionTons: totalKg / 1000,
-            estimatedCost: (totalKg / 1000) * 650, // USD per ton
-            efficiency: Math.max(0, Math.min(100, 100 - (formData.waveHeight * 5 + formData.windSpeed10M * 2))),
-            avgConsumptionRate: stats.average,
-            recommendation: formData.speedOverGround > 10 
-              ? 'Giảm tốc độ để tối ưu tiêu thụ nhiên liệu'
-              : 'Tốc độ ổn định, duy trì điều kiện hiện tại'
-          },
-          vesselInfo: {
-            type: 'container_1_tier1',
-            speedCalc: formData.speedOverGround,
-            distance: formData.speedOverGround * 24, // distance in 24h
-            datetime: new Date().toISOString()
-          },
-          timeSeriesData,
-          comparison,
-          timestamp: new Date()
-        };
-        
-        setFuelPredictionData(newFuelData);
-        setShowDashboard(true);
-        isFuelPred = true;
-        
-        botContent = `✅ Dự đoán hoàn tất!
-
-📊 Total.MomentaryFuel Analysis:
-• Avg: ${stats.average.toFixed(5)} kg/s
-• Max: ${stats.max.toFixed(5)} kg/s
-• Min: ${stats.min.toFixed(5)} kg/s
-• Total 24h: ${totalKg.toFixed(2)} kg
-
-🎯 Features: Speed ${formData.speedOverGround} m/s, Depth ${formData.seaFloorDepth} m, Temp ${formData.temperature2M}°C
-
-Dashboard đã sẵn sàng bên phải! 🚀`;
-      } else {
-        // Regular chat response
-        botContent = generateBotResponse(content);
+      if (!conversationId || !conversationState) {
+        const title = trimmedContent.slice(0, 50) || 'Cuoc tro chuyen moi';
+        const created = await chatService.createConversation(title);
+        const mappedConversation = mapApiConversationToState(created);
+        conversationId = mappedConversation.id;
+        conversationState = mappedConversation;
+        setActiveConversationId(mappedConversation.id);
+        setConversations(prev => {
+          const filtered = prev.filter(conv => conv.id !== mappedConversation.id);
+          return sortConversations([mappedConversation, ...filtered]);
+        });
       }
 
-      const botMessage: MockMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: botContent,
+      if (!conversationId || !conversationState) {
+        throw new Error('Khong the tao cuoc tro chuyen moi.');
+      }
+
+      const tempUserMessage: MockMessage = {
+        id: tempUserId,
+        type: 'user',
+        content: trimmedContent,
         timestamp: new Date(),
-        responseTime,
-        isFuelPrediction: isFuelPred,
-        dashboardData: isFuelPred ? newFuelData : undefined
       };
 
-      setConversations(prev => prev.map(conv => 
-        conv.id === currentConvId 
-          ? { ...conv, messages: [...conv.messages, botMessage] }
-          : conv
-      ));
-    }, 1000 + Math.random() * 1000);
+      const optimisticMessages = [...conversationState.messages, tempUserMessage];
+
+      setConversations(prev => {
+        const exists = prev.some(conv => conv.id === conversationId);
+        const next = exists
+          ? prev.map(conv =>
+              conv.id === conversationId
+                ? {
+                    ...conv,
+                    messages: [...conv.messages, tempUserMessage],
+                    timestamp: new Date(),
+                    hasLoadedHistory: true,
+                  }
+                : conv
+            )
+          : [
+              {
+                ...conversationState,
+                messages: optimisticMessages,
+                hasLoadedHistory: true,
+              },
+              ...prev,
+            ];
+        return sortConversations(next);
+      });
+
+      const persistedUserMessage = await chatService.createMessage(conversationId, {
+        role: 'user',
+        content: trimmedContent,
+      });
+      const persistedUserMock = mapApiMessageToMock(persistedUserMessage);
+
+      setConversations(prev =>
+        sortConversations(
+          prev.map(conv =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.map(msg => (msg.id === tempUserId ? persistedUserMock : msg)),
+                  timestamp: persistedUserMock.timestamp,
+                }
+              : conv
+          )
+        )
+      );
+
+      const payloadMessages: ChatCompletionMessage[] = optimisticMessages.map(msg => ({
+        role: msg.type === 'bot' ? 'assistant' : 'user',
+        content: msg.content,
+      }));
+
+      const contextMessages = buildContextMessages(formData, language);
+      const chatResponse = await chatService.chat({
+        conversationId,
+        messages: payloadMessages,
+        language,
+        context: contextMessages.length ? contextMessages : undefined,
+      });
+
+      const assistantContent = chatResponse.response?.trim() || generateBotResponse(trimmedContent);
+      tempAssistantId = `temp-bot-${Date.now()}`;
+
+      const assistantMessage: MockMessage = {
+        id: tempAssistantId,
+        type: 'bot',
+        content: assistantContent,
+        timestamp: new Date(),
+        metadata: chatResponse.prediction_result ?? undefined,
+        isFuelPrediction: Boolean(chatResponse.prediction_made && chatResponse.prediction_result),
+        dashboardData:
+          chatResponse.prediction_made && chatResponse.prediction_result
+            ? buildDashboardData(formData, chatResponse.prediction_result.fuel_consumption) || undefined
+            : undefined,
+      };
+
+      if (assistantMessage.dashboardData) {
+        setFuelPredictionData(assistantMessage.dashboardData);
+        setShowDashboard(true);
+        setIsComparisonMode(false);
+      }
+
+      setConversations(prev =>
+        sortConversations(
+          prev.map(conv =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: [...conv.messages, assistantMessage],
+                  timestamp: new Date(),
+                }
+              : conv
+          )
+        )
+      );
+
+      const persistedAssistantMock = chatResponse.message
+        ? mapApiMessageToMock(chatResponse.message)
+        : null;
+
+      if (persistedAssistantMock) {
+        setConversations(prev =>
+          sortConversations(
+            prev.map(conv =>
+              conv.id === conversationId
+                ? {
+                    ...conv,
+                    messages: conv.messages.map(msg =>
+                      msg.id === tempAssistantId ? persistedAssistantMock : msg
+                    ),
+                    timestamp: persistedAssistantMock.timestamp,
+                  }
+                : conv
+            )
+          )
+        );
+        try {
+          await refreshConversationMessages(conversationId);
+        } catch (error) {
+          console.error('Failed to refresh conversation', error);
+        }
+      } else if (conversationId) {
+        const fallbackAssistant = await chatService.createMessage(conversationId, {
+          role: 'assistant',
+          content: assistantContent,
+          metadata: chatResponse.prediction_result ?? undefined,
+        });
+        const fallbackAssistantMock = mapApiMessageToMock(fallbackAssistant);
+        setConversations(prev =>
+          sortConversations(
+            prev.map(conv =>
+              conv.id === conversationId
+                ? {
+                    ...conv,
+                    messages: conv.messages.map(msg =>
+                      msg.id === tempAssistantId ? fallbackAssistantMock : msg
+                    ),
+                    timestamp: fallbackAssistantMock.timestamp,
+                  }
+                : conv
+            )
+          )
+        );
+        try {
+          await refreshConversationMessages(conversationId);
+        } catch (error) {
+          console.error('Failed to refresh conversation', error);
+        }
+      }
+    } catch (error) {
+      toast.error('Khong the gui tin nhan', {
+        description: getErrorMessage(error),
+      });
+      if (conversationId) {
+        setConversations(prev =>
+          prev.map(conv =>
+            conv.id === conversationId
+              ? {
+                  ...conv,
+                  messages: conv.messages.filter(
+                    msg => msg.id !== tempUserId && msg.id !== tempAssistantId
+                  ),
+                }
+              : conv
+          )
+        );
+      }
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
   const handleSelectConversation = (conversationId: string) => {
@@ -299,25 +579,62 @@ Dashboard đã sẵn sàng bên phải! 🚀`;
     setShowDashboard(false);
   };
 
-  const handleNewConversation = () => {
-    const newConv: Conversation = {
-      id: Date.now().toString(),
-      title: `Cuộc trò chuyện mới`,
-      messages: [],
-      timestamp: new Date(),
-      isFavorite: false
-    };
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConversationId(newConv.id);
-    setShowDashboard(false);
+  const handleNewConversation = async () => {
+    try {
+      const created = await chatService.createConversation();
+      const mapped = mapApiConversationToState(created);
+      setConversations(prev => {
+        const filtered = prev.filter(conv => conv.id !== mapped.id);
+        return sortConversations([mapped, ...filtered]);
+      });
+      setActiveConversationId(mapped.id);
+      setShowDashboard(false);
+    } catch (error) {
+      toast.error('Khong the tao cuoc tro chuyen moi', {
+        description: getErrorMessage(error),
+      });
+    }
   };
 
-  const handleDeleteConversation = (conversationId: string) => {
-    setConversations(prev => prev.filter(c => c.id !== conversationId));
-    if (activeConversationId === conversationId) {
-      const remaining = conversations.filter(c => c.id !== conversationId);
-      setActiveConversationId(remaining.length > 0 ? remaining[0].id : null);
+  const handleDeleteConversation = async (conversationId: string) => {
+    try {
+      await chatService.deleteConversation(conversationId);
+      setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+      if (activeConversationId === conversationId) {
+        setActiveConversationId(prev => {
+          if (prev !== conversationId) {
+            return prev;
+          }
+          const remaining = conversations.filter(conv => conv.id !== conversationId);
+          return remaining[0]?.id ?? null;
+        });
+        setShowDashboard(false);
+      }
+      toast.success('Da xoa cuoc tro chuyen');
+    } catch (error) {
+      toast.error('Khong the xoa cuoc tro chuyen', {
+        description: getErrorMessage(error),
+      });
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (conversations.length === 0) {
+      return;
+    }
+    try {
+      const deleted = await chatService.deleteAllConversations();
+      setConversations([]);
+      setActiveConversationId(null);
+      setFuelPredictionData(null);
       setShowDashboard(false);
+      toast.success(
+        deleted > 0 ? `Da xoa ${deleted} cuoc tro chuyen` : 'Khong co cuoc tro chuyen de xoa'
+      );
+    } catch (error) {
+      toast.error('Khong the xoa lich su', {
+        description: getErrorMessage(error),
+      });
     }
   };
 
@@ -327,14 +644,6 @@ Dashboard đã sẵn sàng bên phải! 🚀`;
     ));
   };
 
-  const handleClearHistory = () => {
-    setConversations([]);
-    setActiveConversationId(null);
-    setFuelPredictionData(null);
-    setShowDashboard(false);
-    localStorage.removeItem(`conversations_${username}`);
-    toast.success('Đã xóa toàn bộ lịch sử phân tích!');
-  };
 
   const handleExportChat = () => {
     if (!activeConversation) return;
@@ -597,6 +906,7 @@ Dashboard đã sẵn sàng bên phải! 🚀`;
               themeColor={themeColor}
               isDarkMode={isDarkMode}
               customColor={customColor}
+              isLoading={isLoadingConversations}
             />
           </motion.div>
         )}
@@ -809,7 +1119,7 @@ Dashboard đã sẵn sàng bên phải! 🚀`;
               </div>
 
                 {/* Input area - FIXED AT BOTTOM */}
-                <ChatInput onSendMessage={handleSendMessage} themeColor={themeColor} isDarkMode={isDarkMode} customColor={customColor} language={language} />
+                <ChatInput onSendMessage={handleSendMessage} themeColor={themeColor} isDarkMode={isDarkMode} customColor={customColor} language={language} isSending={isInputBusy} />
               </Resizable>
             ) : (
               <div className="flex-1 flex flex-col">
@@ -899,7 +1209,7 @@ Dashboard đã sẵn sàng bên phải! 🚀`;
               </div>
 
                 {/* Input area - FIXED AT BOTTOM */}
-                <ChatInput onSendMessage={handleSendMessage} themeColor={themeColor} isDarkMode={isDarkMode} customColor={customColor} language={language} />
+                <ChatInput onSendMessage={handleSendMessage} themeColor={themeColor} isDarkMode={isDarkMode} customColor={customColor} language={language} isSending={isInputBusy} />
               </div>
             )
           )}

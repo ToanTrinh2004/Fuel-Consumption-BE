@@ -1,7 +1,10 @@
-import httpx
 import json
+import os
 import re
 from typing import List, Dict, Any, Optional, Tuple
+
+import httpx
+from httpx import URL
 
 # System Prompts
 SYSTEM_PROMPT_EN = """You are a helpful maritime fuel consumption assistant powered by AI.
@@ -83,18 +86,64 @@ Không thêm bất kỳ lời giải thích, chú thích hoặc kết quả nào
 
 
 
+def _get_env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _get_env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 class LLMService:
     def __init__(
-        self, 
-        api_url: str = "http://localhost:1234/v1/chat/completions",
-        model_name: str = "llama3-8b-instruct",
-        temperature: float = 0.7,
-        max_tokens: int = 1024
+        self,
+        api_url: Optional[str] = None,
+        model_name: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
     ):
-        self.api_url = api_url
-        self.model_name = model_name
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.api_url = api_url or os.getenv("LLM_API_URL", "http://localhost:1234/v1/chat/completions")
+        self.model_name = model_name or os.getenv("LLM_MODEL_NAME", "llama3-8b-instruct")
+        self.temperature = temperature if temperature is not None else _get_env_float("LLM_TEMPERATURE", 0.7)
+        self.max_tokens = max_tokens if max_tokens is not None else _get_env_int("LLM_MAX_TOKENS", 1024)
+        api_url_object = URL(self.api_url)
+        self.models_url = str(api_url_object.copy_with(path="/v1/models", query=None))
+
+    async def _discover_model(self, client: httpx.AsyncClient) -> Optional[str]:
+        try:
+            response = await client.get(self.models_url)
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            print(f" Unable to fetch models list from {self.models_url}: {exc}")
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+
+        data = payload.get("data") or payload.get("models")
+        if not isinstance(data, list) or not data:
+            return None
+
+        first = data[0]
+        if isinstance(first, dict):
+            return first.get("id") or first.get("name")
+        if isinstance(first, str):
+            return first
+        return None
     
     def get_system_prompt(self, language: str = "en") -> str:
         """Get system prompt for specified language"""
@@ -133,11 +182,26 @@ class LLMService:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(self.api_url, json=payload)
+                if response.status_code == 404:
+                    fallback_model = await self._discover_model(client)
+                    if fallback_model and fallback_model != self.model_name:
+                        print(
+                            f" LLM model '{self.model_name}' not available; retrying with '{fallback_model}'"
+                        )
+                        self.model_name = fallback_model
+                        payload["model"] = fallback_model
+                        response = await client.post(self.api_url, json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
         except httpx.HTTPError as e:
-            print(f" LLM HTTP error: {e}")
+            body = None
+            if e.response is not None:
+                try:
+                    body = e.response.json()
+                except ValueError:
+                    body = e.response.text
+            print(f" LLM HTTP error: {e} | response={body}")
             raise
         except Exception as e:
             print(f" LLM error: {e}")

@@ -33,6 +33,10 @@ def verify_token(token: str) -> dict[str, Any]:
 def token_required(func: Callable[P, R]) -> Callable[P, R]:
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        if request.method == "OPTIONS":
+            # Allow CORS preflight requests to pass through without auth.
+            return current_app.make_default_options_response()  # type: ignore[return-value]
+
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return jsonify({"error": "Authorization header missing or invalid"}), 401  # type: ignore[return-value]

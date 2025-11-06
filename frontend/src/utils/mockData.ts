@@ -48,6 +48,7 @@ export interface MockMessage {
   type: 'user' | 'bot';
   content: string;
   timestamp: Date;
+  metadata?: Record<string, any> | null;
   responseTime?: number;
   isFuelPrediction?: boolean;
   dashboardData?: DashboardData;

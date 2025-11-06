@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { ChevronDown, ChevronUp, Sparkles, Send, History } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, Send, History, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner@2.0.3';
 import { ThemeColor, Language } from '../App';
@@ -25,14 +25,15 @@ interface SavedInput {
 }
 
 interface ChatInputProps {
-  onSendMessage: (content: string, formData: any) => void;
+  onSendMessage: (content: string, formData: any) => void | Promise<void>;
   themeColor: ThemeColor;
   isDarkMode: boolean;
   customColor: string;
   language: Language;
+  isSending?: boolean;
 }
 
-export default function ChatInput({ onSendMessage, themeColor, isDarkMode, customColor, language }: ChatInputProps) {
+export default function ChatInput({ onSendMessage, themeColor, isDarkMode, customColor, language, isSending = false }: ChatInputProps) {
   // 7 features theo benchmark FuelCast
   const [speedOverGround, setSpeedOverGround] = useState('');
   const [windSpeed10M, setWindSpeed10M] = useState('');
@@ -61,6 +62,10 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (isSending) {
+      return;
+    }
+
     if (!showForm) return;
 
     // Validate all 7 features
@@ -190,7 +195,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (textMessage.trim()) {
+      if (textMessage.trim() && !isSending) {
         onSendMessage(textMessage.trim(), {});
         setTextMessage('');
       }
@@ -485,11 +490,21 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                 {/* Submit Button */}
                 <Button
                   type="submit"
-                  className={`${colors.primary} ${colors.primaryHover} text-white w-full h-10 text-sm shadow-lg mt-2`}
+                  disabled={isSending}
+                  className={`${colors.primary} ${colors.primaryHover} text-white w-full h-10 text-sm shadow-lg mt-2 ${isSending ? 'opacity-80 cursor-not-allowed' : ''}`}
                   style={themeColor === 'custom' ? { backgroundColor: customColor } : {}}
                 >
-                  <Send className="h-4 w-4 mr-2" />
-                  Dự đoán Total.MomentaryFuel (kg/s)
+                  {isSending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Dang xu ly...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      D? do�n Total.MomentaryFuel (kg/s)
+                    </>
+                  )}
                 </Button>
 
                 <div className="space-y-1 mt-1">

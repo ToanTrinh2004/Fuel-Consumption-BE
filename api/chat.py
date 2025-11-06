@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from http.client import HTTPException
+from datetime import datetime
 from typing import Any, Dict, List, Optional
-from werkzeug.exceptions import InternalServerError
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import joinedload
+from werkzeug.exceptions import InternalServerError
 
 from core.database import db
 from core.models import Conversation, Message, User
@@ -61,6 +61,7 @@ def _conversation_to_dict(
 
 
 @chat_bp.route("/conversations", methods=["POST"])
+@token_required
 def create_conversation(current_user: User):
     payload = request.get_json(silent=True) or {}
 
@@ -122,6 +123,72 @@ def list_messages(conversation_id: int, current_user: User):
     return jsonify({"items": [_message_to_dict(msg) for msg in messages]})
 
 
+@chat_bp.route("/conversations/<int:conversation_id>/messages", methods=["POST"])
+@token_required
+def create_message(conversation_id: int, current_user: User):
+    conversation = Conversation.query.get(conversation_id)
+    if not conversation:
+        return jsonify({"error": "Conversation khong ton tai"}), 404
+
+    if conversation.user_id != current_user.id:
+        return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "").strip().lower()
+    content = (payload.get("content") or "").strip()
+    metadata = payload.get("metadata")
+
+    if role not in {"user", "assistant"}:
+        return jsonify({"error": "Role khong hop le"}), 400
+
+    if not content:
+        return jsonify({"error": "Noi dung khong duoc de trong"}), 400
+
+    message = Message(
+        conversation_id=conversation.id,
+        role=role,
+        content=content,
+        metadata_json=metadata,
+    )
+    db.session.add(message)
+    conversation.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify(_message_to_dict(message)), 201
+
+
+@chat_bp.route("/conversations/<int:conversation_id>", methods=["DELETE"])
+@token_required
+def delete_conversation(conversation_id: int, current_user: User):
+    conversation = Conversation.query.get(conversation_id)
+    if not conversation:
+        return jsonify({"error": "Conversation khong ton tai"}), 404
+
+    if conversation.user_id != current_user.id:
+        return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
+
+    db.session.delete(conversation)
+    db.session.commit()
+
+    return jsonify({"deleted": True})
+
+
+@chat_bp.route("/conversations", methods=["DELETE"])
+@token_required
+def delete_all_conversations(current_user: User):
+    conversations = Conversation.query.filter(Conversation.user_id == current_user.id).all()
+    deleted = len(conversations)
+
+    if deleted == 0:
+        return jsonify({"deleted": 0})
+
+    for conversation in conversations:
+        db.session.delete(conversation)
+
+    db.session.commit()
+    return jsonify({"deleted": deleted})
+
+
 @chat_bp.route("/predict", methods=["POST"])
 def predict_endpoint():
     try:
@@ -143,13 +210,23 @@ def predict_endpoint():
         raise InternalServerError(description=f"Prediction error: {str(e)}")
     
 @chat_bp.route("/chat", methods=["POST"])
-def chat_with_auto_prediction():
+@token_required
+def chat_with_auto_prediction(current_user: User):
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
         messages = data.get("messages", [])
         language = data.get("language", "en")
         context = data.get("context", [])
-        print(context)
+        conversation_id = data.get("conversation_id")
+
+        conversation: Optional[Conversation] = None
+        if conversation_id is not None:
+            conversation = Conversation.query.get(conversation_id)
+            if not conversation:
+                return jsonify({"error": "Conversation khong ton tai"}), 404
+            if conversation.user_id != current_user.id:
+                return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
+
         if isinstance(context, list) and context:
             messages = context + messages
 
@@ -199,10 +276,24 @@ def chat_with_auto_prediction():
 
         print(f"Returning response - prediction_made: {is_function_call}")
 
+        saved_message_dict: Optional[Dict[str, Any]] = None
+        if conversation:
+            assistant_message = Message(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=final_response,
+                metadata_json=prediction_result,
+            )
+            db.session.add(assistant_message)
+            conversation.updated_at = datetime.utcnow()
+            db.session.commit()
+            saved_message_dict = _message_to_dict(assistant_message)
+
         return jsonify({
             "response": final_response,
             "prediction_made": is_function_call,
-            "prediction_result": prediction_result
+            "prediction_result": prediction_result,
+            "message": saved_message_dict,
         }), 200
 
     except Exception as e:
