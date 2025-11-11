@@ -80,3 +80,49 @@ class Message(db.Model):
 
     def __repr__(self) -> str:
         return f"<Message {self.id} role={self.role}>"
+
+class State(db.Model):
+    __tablename__ = "states"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+
+    Ship_SpeedOverGround = db.Column(db.Float, nullable=True)
+    Environment_SeaFloorDepth = db.Column(db.Float, nullable=True)
+    Weather_Temperature2M = db.Column(db.Float, nullable=True)
+    Weather_OceanCurrentVelocity = db.Column(db.Float, nullable=True)
+    Weather_WindSpeed10M = db.Column(db.Float, nullable=True)
+    Weather_WaveHeight = db.Column(db.Float, nullable=True)
+    Weather_WavePeriod = db.Column(db.Float, nullable=True)
+
+  
+    ship_type = db.Column(db.String(255), nullable=True)
+
+    
+    conversation_id = db.Column(
+        db.Integer,
+        db.ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    conversation = db.relationship(
+        "Conversation",
+        backref=db.backref("states", cascade="all, delete-orphan")
+    )
+
+    created_at = db.Column(db.DateTime, server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<State {self.id} (Conversation {self.conversation_id})>"
+
+class LLMRoleExample(db.Model):
+    __tablename__ = "llm_role_examples"
+
+    id = db.Column(db.Integer, primary_key=True)
+    role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=False)
+    user_prompt = db.Column(db.Text, nullable=False)
+    assistant_response = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<LLMRoleExample id={self.id} role_id={self.role_id}>"
+
