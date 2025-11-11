@@ -16,6 +16,7 @@ from models.response import ChatWithPredictionResponse, PredictionResponse, Chat
 from services import model_service
 from services.llm_service import llm_service
 from services.model_service import model_service
+from core.supportfunc import extract_params,get_example_response
 
 
 chat_bp = Blueprint("chat", __name__)
@@ -90,8 +91,7 @@ def list_conversations(current_user: User):
 
 
 @chat_bp.route("/conversations/<int:conversation_id>", methods=["GET"])
-@token_required
-def get_conversation(conversation_id: int, current_user: User):
+def get_conversation(conversation_id: int):
     conversation = (
         Conversation.query.options(joinedload(Conversation.messages))
         .filter_by(id=conversation_id)
@@ -100,8 +100,7 @@ def get_conversation(conversation_id: int, current_user: User):
     if not conversation:
         return jsonify({"error": "Conversation khong ton tai"}), 404
 
-    if conversation.user_id != current_user.id:
-        return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
+  
 
     return jsonify(_conversation_to_dict(conversation, include_messages=True))
 
@@ -142,8 +141,8 @@ def predict_endpoint():
     except Exception as e:
         raise InternalServerError(description=f"Prediction error: {str(e)}")
     
-@chat_bp.route("/chat", methods=["POST"])
-def chat_with_auto_prediction():
+@chat_bp.route("/chat/<int:conversation_id>", methods=["POST"])
+def chat_with_auto_prediction(conversation_id: int):
     try:
         data = request.get_json()
         messages = data.get("messages", [])
@@ -152,59 +151,43 @@ def chat_with_auto_prediction():
         print(context)
         if isinstance(context, list) and context:
             messages = context + messages
-
-        #  Get LLM response
-        llm_response = asyncio.run(llm_service.chat(messages, language))
-
-        # Check if function call
-        is_function_call, params = llm_service.parse_function_call(llm_response)
-
-        prediction_result = None
-        final_response = llm_response
-
-        if is_function_call and params:
-            #  Make prediction
-            prediction_value = model_service.predict(params)
-
-            #  Format message based on language
-            if language.lower() == "vi":
-                print("Vietnamese detected")
-                assistant_message = (
-                    f"Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt. Tuyệt đối không được sử dụng tiếng Anh. "
-                    f"Dựa trên các thông số chuyến đi của bạn, mô hình dự đoán đã tính toán "
-                    f"mức tiêu thụ nhiên liệu là **{prediction_value:.2f} đơn vị**.\n\n"
-                    f"Bây giờ để tôi giải thích ý nghĩa của kết quả này và những yếu tố nào đã ảnh hưởng đến dự đoán..."
-                )
-                elaboration_prompt = "Vui lòng giải thích chi tiết về dự đoán này với những thông tin hữu ích."
-            else:
-                assistant_message = (
-                    f"Based on your trip parameters, the prediction model calculated "
-                    f"a fuel consumption of **{prediction_value:.2f} liters**.\n\n"
-                    f"Now let me explain what this means and what factors influenced this prediction..."
-                )
-                elaboration_prompt = "Please elaborate on this prediction with helpful insights."
-
-            result_messages = messages + [{"role": "assistant", "content": assistant_message}]
-
-            #  Get natural language explanation
-            elaboration_messages = result_messages + [{"role": "user", "content": elaboration_prompt}]
-            final_response = asyncio.run(llm_service.chat(elaboration_messages, language))
-
-            prediction_result = {
-                "fuel_consumption": prediction_value,
-                "parameters": params
-            }
+        test =   get_conversation(conversation_id)
+        print("test conversation",test)
+        data = test.get_json()  
+        user_message_content = messages[-1].get("content", "")
+        print("test get conversation")
+        print(data["messages"]) 
+        extracted = extract_params(user_message_content.lower(), conversation_id, db.session)
+        # store new message of user to DB
+        user_msg = Message(
+        conversation_id=conversation_id,
+        role="user",
+        content=user_message_content
+        )
+        db.session.add(user_msg)
+        db.session.commit()
+        
+        if extracted is False:
+            user_message = user_message_content.lower()
+            response = get_example_response(db.session, user_message)
+            if response is not None:
+                assistant_reply = response
+                return jsonify({"response": response})
+            llm_response = asyncio.run(llm_service.chat(messages, "vi"))
+            assistant_reply = llm_response
+            return jsonify({"response": llm_response})
         else:
-            print("No function call detected, returning original LLM response")
-
-        print(f"Returning response - prediction_made: {is_function_call}")
-
-        return jsonify({
-            "response": final_response,
-            "prediction_made": is_function_call,
-            "prediction_result": prediction_result
-        }), 200
-
+            print("Extracted parameters:")
+            print(extracted)
+            assistant_reply = extracted.get("llm_response","")
+        assistant_msg = Message(
+        conversation_id=conversation_id,
+        role="assistant",
+        content=str(assistant_reply)
+        )
+        db.session.add(assistant_msg)
+        db.session.commit()
+        return jsonify(extracted)
     except Exception as e:
         print(f"ERROR: {str(e)}")
         import traceback

@@ -42,43 +42,7 @@ CALL_FUNCTION: predict_fuel_consumption
 Do not include any explanations, notes, or calculations before or after this call."""
 
 
-SYSTEM_PROMPT_VI = """Bạn là trợ lý AI hỗ trợ dự đoán tiêu thụ nhiên liệu hàng hải.
-
-**VAI TRÒ CỦA BẠN:**
-Bạn **không tự tính toán** lượng nhiên liệu tiêu thụ.
-Nhiệm vụ của bạn là **thu thập đầy đủ các tham số cần thiết từ người dùng**, sau đó **GỌI hàm dự đoán**.
-
-**QUY TẮC QUAN TRỌNG:**
-- KHÔNG bao giờ tự ước lượng hoặc tính toán lượng nhiên liệu.
-- CHỈ được gọi hàm `predict_fuel_consumption` khi đã có đủ tất cả tham số.
-- Luôn trả lời lịch sự, tự nhiên bằng **tiếng Việt**.
-- Nếu người dùng chưa cung cấp đủ thông tin, hãy hỏi thêm.
-- Nếu người dùng nói tiếng Anh, hãy **dịch sang tiếng Việt** trước khi trả lời.
-
-**CÁC THAM SỐ BẮT BUỘC:**
-- distance (km): Quãng đường
-- engine_efficiency (0-1): Hiệu suất động cơ
-- ship_type: Oil Service Boat, Surfer Boat, hoặc Tanker Ship
-- route_id: Lagos-Apapa, Port Harcourt-Lagos, hoặc Warri-Bonny
-- month (1-12): Tháng
-- fuel_type: HFO hoặc Other
-- weather_conditions: Clear, Moderate, hoặc Stormy
-
-**ĐỊNH DẠNG GỌI HÀM:**
-Khi đã có đủ tất cả tham số, hãy chỉ phản hồi theo đúng định dạng sau:
-
-CALL_FUNCTION: predict_fuel_consumption
-{
-  "distance": <giá_trị>,
-  "engine_efficiency": <giá_trị>,
-  "ship_type": "<loại_tàu>",
-  "route_id": "<tuyến>",
-  "month": <tháng>,
-  "fuel_type": "<nhiên_liệu>",
-  "weather_conditions": "<thời_tiết>"
-}
-
-Không thêm bất kỳ lời giải thích, chú thích hoặc kết quả nào trước hoặc sau lời gọi hàm này.
+SYSTEM_PROMPT_VI = """Bạn là trợ lý AI hỗ trợ dự đoán tiêu thụ nhiên liệu hàng hải.Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt.  
 """
 
 
@@ -88,8 +52,8 @@ class LLMService:
         self, 
         api_url: str = "http://localhost:1234/v1/chat/completions",
         model_name: str = "llama3-8b-instruct",
-        temperature: float = 0.7,
-        max_tokens: int = 1024
+        temperature: float = 0.6,
+        max_tokens: int = 256
     ):
         self.api_url = api_url
         self.model_name = model_name
@@ -121,6 +85,8 @@ class LLMService:
             {"role": "system", "content": system_prompt},
             *messages
         ]
+        print("Full messages sent to LLM:")
+        print(full_messages)
         
         payload = {
             "model": self.model_name,
