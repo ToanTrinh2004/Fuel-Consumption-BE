@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from functools import wraps
 from typing import Any, Callable, ParamSpec, TypeVar
 
@@ -21,7 +22,7 @@ def _get_serializer() -> URLSafeTimedSerializer:
 
 
 def issue_token(user: User) -> str:
-    payload = {"sub": user.id, "email": user.email}
+    payload = {"sub": str(user.id), "email": user.email}
     return _get_serializer().dumps(payload)
 
 
@@ -32,6 +33,10 @@ def verify_token(token: str) -> dict[str, Any]:
 def token_required(func: Callable[P, R]) -> Callable[P, R]:
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        if request.method == "OPTIONS":
+            # Allow CORS preflight requests to pass through without auth.
+            return current_app.make_default_options_response()  # type: ignore[return-value]
+
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return jsonify({"error": "Authorization header missing or invalid"}), 401  # type: ignore[return-value]
@@ -51,7 +56,12 @@ def token_required(func: Callable[P, R]) -> Callable[P, R]:
         if not user_id:
             return jsonify({"error": "Token khong hop le"}), 401  # type: ignore[return-value]
 
-        user = User.query.get(user_id)
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Token khong hop le"}), 401  # type: ignore[return-value]
+
+        user = User.query.get(user_uuid)
         if not user:
             return jsonify({"error": "Nguoi dung khong ton tai"}), 401  # type: ignore[return-value]
 

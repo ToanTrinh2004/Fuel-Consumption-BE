@@ -1,5 +1,7 @@
+import uuid
 from datetime import datetime
 
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 
 from core.database import db
@@ -8,7 +10,7 @@ from core.database import db
 class User(db.Model):
     __tablename__ = "users"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     full_name = db.Column(db.String(255))
@@ -36,7 +38,11 @@ class Conversation(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False, default="Cuoc tro chuyen")
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    user_id = db.Column(
+        UUID(as_uuid=True),
+        db.ForeignKey("users.id"),
+        nullable=True,
+    )
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.now())
     updated_at = db.Column(
         db.DateTime,

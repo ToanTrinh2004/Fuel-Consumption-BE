@@ -8,7 +8,7 @@ import GoogleIcon from './GoogleIcon';
 import fluxmareLogo from 'figma:asset/48159e3c19318e6ee94d6f46a7da4911deba57ae.png';
 
 interface RegisterFormProps {
-  onRegister: (username: string, email: string, password: string) => void;
+  onRegister: (username: string, email: string, password: string) => Promise<void>;
   onToggleForm: () => void;
   isDarkMode: boolean;
   accentColor?: string;
@@ -22,37 +22,49 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!username || !email || !password || !confirmPassword) {
-      alert('Vui lòng điền đầy đủ thông tin!');
+      setErrorMessage('Vui lòng điền đầy đủ thông tin.');
       return;
     }
 
     if (password !== confirmPassword) {
-      alert('Mật khẩu không khớp!');
+      setErrorMessage('Mật khẩu không khớp.');
       return;
     }
 
     if (!agreeTerms) {
-      alert('Vui lòng đồng ý với điều khoản sử dụng!');
+      setErrorMessage('Vui lòng đồng ý với điều khoản sử dụng.');
       return;
     }
 
-    if (password.length < 6) {
-      alert('Mật khẩu phải có ít nhất 6 ký tự!');
+    if (password.length < 8) {
+      setErrorMessage('Mật khẩu cần ít nhất 8 ký tự.');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      alert('Email không hợp lệ!');
+      setErrorMessage('Email không hợp lệ.');
       return;
     }
 
-    onRegister(username, email, password);
+    setErrorMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await onRegister(username, email, password);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Đăng ký thất bại. Vui lòng thử lại.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Function to adjust color brightness for better contrast
@@ -138,6 +150,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 h-9 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -171,6 +184,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 h-9 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -204,6 +218,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 pr-11 h-9 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -220,6 +235,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
                   className={`absolute right-3 top-1/2 -translate-y-1/2 ${
                     isDarkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
                   } transition-colors`}
@@ -246,6 +262,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  disabled={isSubmitting}
                   className={`pl-11 pr-11 h-9 rounded-xl border-2 transition-all ${
                     isDarkMode 
                       ? 'bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500' 
@@ -262,6 +279,7 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  disabled={isSubmitting}
                   className={`absolute right-3 top-1/2 -translate-y-1/2 ${
                     isDarkMode ? 'text-slate-400 hover:text-slate-300' : 'text-slate-500 hover:text-slate-700'
                   } transition-colors`}
@@ -299,6 +317,17 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
               </label>
             </motion.div>
 
+            {errorMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+                className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-500"
+              >
+                {errorMessage}
+              </motion.div>
+            )}
+
             {/* Register Button */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -311,11 +340,13 @@ export default function RegisterForm({ onRegister, onToggleForm, isDarkMode, acc
                 style={{
                   backgroundColor: primaryColor,
                 }}
+                disabled={isSubmitting}
+                aria-busy={isSubmitting}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = lighterColor}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = primaryColor}
               >
                 <UserPlus className="h-5 w-5 mr-2" />
-                Đăng ký
+                {isSubmitting ? 'Đang xử lý…' : 'Đăng ký'}
               </Button>
             </motion.div>
 

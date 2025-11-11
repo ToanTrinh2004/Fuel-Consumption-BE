@@ -1,5 +1,13 @@
 import apiClient from './client';
-import type { AuthResponse, User } from '@/shared/types';
+
+export interface LoginResponse {
+  access_token: string;
+  token_type: string;
+}
+
+export interface RegisterResponse extends LoginResponse {
+  message?: string;
+}
 
 interface LoginCredentials {
   email: string;
@@ -9,32 +17,49 @@ interface LoginCredentials {
 interface RegisterData {
   email: string;
   password: string;
-  fullName: string;
+  fullName?: string;
 }
 
+const extractPayloadError = (error: unknown): Error => {
+  if (typeof error === 'string') {
+    return new Error(error);
+  }
+
+  if (error && typeof error === 'object') {
+    const payload = error as Record<string, unknown>;
+    if (typeof payload.error === 'string') {
+      return new Error(payload.error);
+    }
+    if (typeof payload.message === 'string') {
+      return new Error(payload.message);
+    }
+  }
+
+  return new Error('Yêu cầu không thể thực hiện. Vui lòng thử lại.');
+};
+
 export const authService = {
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
-    return response.data;
+  async login(credentials: LoginCredentials): Promise<LoginResponse> {
+    try {
+      const response = await apiClient.post<LoginResponse>('/auth/login', credentials);
+      return response.data;
+    } catch (error) {
+      throw extractPayloadError(error);
+    }
   },
 
-  async register(userData: RegisterData): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/register', userData);
-    return response.data;
-  },
+  async register(userData: RegisterData): Promise<RegisterResponse> {
+    try {
+      const payload = {
+        email: userData.email,
+        password: userData.password,
+        ...(userData.fullName ? { full_name: userData.fullName } : {}),
+      };
 
-  async googleLogin(googleToken: string): Promise<AuthResponse> {
-    const response = await apiClient.post<AuthResponse>('/auth/google', { googleToken });
-    return response.data;
-  },
-
-  async logout(): Promise<void> {
-    await apiClient.post('/auth/logout');
-    localStorage.removeItem('fluxmare_token');
-  },
-
-  async getCurrentUser(): Promise<User> {
-    const response = await apiClient.get<{ user: User }>('/auth/me');
-    return response.data.user;
+      const response = await apiClient.post<RegisterResponse>('/auth/register', payload);
+      return response.data;
+    } catch (error) {
+      throw extractPayloadError(error);
+    }
   },
 };
