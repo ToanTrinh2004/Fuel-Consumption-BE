@@ -238,9 +238,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const messages = activeConversation?.messages || [];
-  const isActiveConversationLoading =
-    loadingConversationId !== null && loadingConversationId === activeConversationId;
-  const isInputBusy = isSendingMessage || isActiveConversationLoading;
+  const isInputBusy = isSendingMessage;
 
   useEffect(() => {
     let ignore = false;
@@ -369,6 +367,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     if (!trimmedContent || isSendingMessage) {
       return;
     }
+    setIsSendingMessage(true);
 
     let conversationId = activeConversationId;
     let conversationState = conversations.find(conv => conv.id === conversationId);
@@ -376,7 +375,6 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     let tempAssistantId: string | null = null;
 
     try {
-      setIsSendingMessage(true);
       setShowSuggestions(false);
 
       if (!conversationId || !conversationState) {
@@ -429,26 +427,6 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
         return sortConversations(next);
       });
 
-      const persistedUserMessage = await chatService.createMessage(conversationId, {
-        role: 'user',
-        content: trimmedContent,
-      });
-      const persistedUserMock = mapApiMessageToMock(persistedUserMessage);
-
-      setConversations(prev =>
-        sortConversations(
-          prev.map(conv =>
-            conv.id === conversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.map(msg => (msg.id === tempUserId ? persistedUserMock : msg)),
-                  timestamp: persistedUserMock.timestamp,
-                }
-              : conv
-          )
-        )
-      );
-
       const payloadMessages: ChatCompletionMessage[] = optimisticMessages.map(msg => ({
         role: msg.type === 'bot' ? 'assistant' : 'user',
         content: msg.content,
@@ -498,11 +476,8 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
         )
       );
 
-      const persistedAssistantMock = chatResponse.message
-        ? mapApiMessageToMock(chatResponse.message)
-        : null;
-
-      if (persistedAssistantMock) {
+      if (chatResponse.message) {
+        const persistedAssistantMock = mapApiMessageToMock(chatResponse.message);
         setConversations(prev =>
           sortConversations(
             prev.map(conv =>
@@ -518,38 +493,6 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
             )
           )
         );
-        try {
-          await refreshConversationMessages(conversationId);
-        } catch (error) {
-          console.error('Failed to refresh conversation', error);
-        }
-      } else if (conversationId) {
-        const fallbackAssistant = await chatService.createMessage(conversationId, {
-          role: 'assistant',
-          content: assistantContent,
-          metadata: chatResponse.prediction_result ?? undefined,
-        });
-        const fallbackAssistantMock = mapApiMessageToMock(fallbackAssistant);
-        setConversations(prev =>
-          sortConversations(
-            prev.map(conv =>
-              conv.id === conversationId
-                ? {
-                    ...conv,
-                    messages: conv.messages.map(msg =>
-                      msg.id === tempAssistantId ? fallbackAssistantMock : msg
-                    ),
-                    timestamp: fallbackAssistantMock.timestamp,
-                  }
-                : conv
-            )
-          )
-        );
-        try {
-          await refreshConversationMessages(conversationId);
-        } catch (error) {
-          console.error('Failed to refresh conversation', error);
-        }
       }
     } catch (error) {
       toast.error('Khong the gui tin nhan', {

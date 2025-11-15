@@ -502,7 +502,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                   ) : (
                     <>
                       <Send className="h-4 w-4 mr-2" />
-                      D? do�n Total.MomentaryFuel (kg/s)
+                      Dự đoán Total.MomentaryFuel (kg/s)
                     </>
                   )}
                 </Button>

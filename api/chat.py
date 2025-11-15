@@ -236,27 +236,30 @@ def chat_with_auto_prediction():
         db.session.add(user_msg)
         db.session.commit()
         
+        response_payload: Dict[str, Any]
         if extracted is False:
             user_message = user_message_content.lower()
             response = get_example_response(db.session, user_message)
             if response is not None:
                 assistant_reply = response
-                return jsonify({"response": response})
-            llm_response = asyncio.run(llm_service.chat(messages, "vi"))
-            assistant_reply = llm_response
-            return jsonify({"response": llm_response})
+                response_payload = {"response": response}
+            else:
+                llm_response = asyncio.run(llm_service.chat(messages, "vi"))
+                assistant_reply = llm_response
+                response_payload = {"response": llm_response}
         else:
             print("Extracted parameters:")
             print(extracted)
-            assistant_reply = extracted.get("llm_response","")
+            assistant_reply = extracted.get("llm_response", "")
+            response_payload = extracted
         assistant_msg = Message(
-        conversation_id=conversation_id,
-        role="assistant",
-        content=str(assistant_reply)
+            conversation_id=conversation_id,
+            role="assistant",
+            content=str(assistant_reply)
         )
         db.session.add(assistant_msg)
         db.session.commit()
-        return jsonify(extracted)
+        return jsonify(response_payload)
     except Exception as e:
         print(f"ERROR: {str(e)}")
         import traceback
