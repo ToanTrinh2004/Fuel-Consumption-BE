@@ -21,6 +21,7 @@ interface SavedInput {
     seaFloorDepth: string;
     temperature2M: string;
     oceanCurrentVelocity: string;
+    shipType?: string;
   };
 }
 
@@ -33,8 +34,14 @@ interface ChatInputProps {
   isSending?: boolean;
 }
 
+const SHIP_TYPE_OPTIONS = [
+  { value: 'Ceto', label: 'Ceto' },
+  { value: 'Poseidon', label: 'Poseidon' },
+  { value: 'Triton', label: 'Triton' },
+];
+
 export default function ChatInput({ onSendMessage, themeColor, isDarkMode, customColor, language, isSending = false }: ChatInputProps) {
-  // 7 features theo benchmark FuelCast
+  // 8 features theo benchmark FuelCast + loại tàu
   const [speedOverGround, setSpeedOverGround] = useState('');
   const [windSpeed10M, setWindSpeed10M] = useState('');
   const [waveHeight, setWaveHeight] = useState('');
@@ -42,6 +49,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
   const [seaFloorDepth, setSeaFloorDepth] = useState('');
   const [temperature2M, setTemperature2M] = useState('');
   const [oceanCurrentVelocity, setOceanCurrentVelocity] = useState('');
+  const [shipType, setShipType] = useState('');
   
   const [textMessage, setTextMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -68,18 +76,22 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
 
     if (!showForm) return;
 
-    // Validate all 7 features
-    const features = [
+    // Validate numeric features first
+    const numericFeatures = [
       speedOverGround, windSpeed10M, waveHeight, wavePeriod,
       seaFloorDepth, temperature2M, oceanCurrentVelocity
     ];
 
-    const emptyFields = features.filter(f => !f).length;
+    const emptyFields = numericFeatures.filter(f => !f).length;
     
     if (emptyFields > 0) {
-      toast.error('Vui lòng nhập đầy đủ 7 đặc trưng!', {
+      toast.error('Vui lòng nhập đầy đủ 8 đặc trưng!', {
         description: `Còn ${emptyFields} trường chưa điền`
       });
+      return;
+    }
+    if (!shipType) {
+      toast.error('Vui lòng chọn loại tàu!');
       return;
     }
 
@@ -128,14 +140,15 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
       wavePeriod: period,
       seaFloorDepth: depth,
       temperature2M: temp,
-      oceanCurrentVelocity: currentVel
+      oceanCurrentVelocity: currentVel,
+      shipType
     };
 
     // Save to history
     const savedInput: SavedInput = {
       id: Date.now().toString(),
       timestamp: new Date().toISOString(),
-      label: `Speed ${speed.toFixed(1)} | Wave ${height.toFixed(2)}m | Wind ${windSpeed.toFixed(1)}m/s`,
+      label: `Speed ${speed.toFixed(1)} | Wave ${height.toFixed(2)}m | Wind ${windSpeed.toFixed(1)}m/s | Ship ${shipType}`,
       data: {
         speedOverGround,
         windSpeed10M,
@@ -143,7 +156,8 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
         wavePeriod,
         seaFloorDepth,
         temperature2M,
-        oceanCurrentVelocity
+        oceanCurrentVelocity,
+        shipType
       }
     };
 
@@ -151,7 +165,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
     setSavedInputs(newSavedInputs);
     localStorage.setItem('fluxmare_saved_inputs', JSON.stringify(newSavedInputs));
 
-    const message = `📊 Dự đoán Total.MomentaryFuel với 7 features:\n• Ship_SpeedOverGround: ${speed} m/s\n• Weather_WindSpeed10M: ${windSpeed} m/s | WaveHeight: ${height} m | WavePeriod: ${period} s\n• Environment_SeaFloorDepth: ${depth} m | Temperature2M: ${temp}°C | OceanCurrentVelocity: ${currentVel} m/s`;
+    const message = `📊 Dự đoán Total.MomentaryFuel với 8 features:\n• Ship_SpeedOverGround: ${speed} m/s | ShipType: ${shipType}\n• Weather_WindSpeed10M: ${windSpeed} m/s | WaveHeight: ${height} m | WavePeriod: ${period} s\n• Environment_SeaFloorDepth: ${depth} m | Temperature2M: ${temp}°C | OceanCurrentVelocity: ${currentVel} m/s`;
     
     onSendMessage(message, formData);
     
@@ -167,6 +181,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
     setSeaFloorDepth('');
     setTemperature2M('');
     setOceanCurrentVelocity('');
+    setShipType('');
   };
 
   const loadSavedInput = (inputId: string) => {
@@ -179,6 +194,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
       setSeaFloorDepth(saved.data.seaFloorDepth);
       setTemperature2M(saved.data.temperature2M);
       setOceanCurrentVelocity(saved.data.oceanCurrentVelocity);
+      setShipType(saved.data.shipType || '');
       
       toast.success('Đã load dữ liệu!', {
         description: saved.label
@@ -265,7 +281,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
         {/* Chat Textarea */}
         <div className="relative">
           <Textarea
-            placeholder="Hỏi về Total.MomentaryFuel hoặc nhập 7 features bên dưới... (Enter gửi, Shift+Enter xuống dòng)"
+            placeholder="Hỏi về Total.MomentaryFuel hoặc nhập 8 features bên dưới... (Enter gửi, Shift+Enter xuống dòng)"
             value={textMessage}
             onChange={(e) => setTextMessage(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -324,12 +340,12 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
             className={`${colors.accent} ${colors.primaryHover} text-xs h-6 px-2 flex items-center gap-1`}
           >
             {showForm ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {showForm ? 'Ẩn Form' : 'Form 7 Features'}
+            {showForm ? 'Ẩn Form' : 'Form 8 Features'}
           </Button>
           <div className={`flex-1 h-px ${colors.border}`}></div>
         </div>
 
-        {/* Form with 7 features */}
+        {/* Form with 8 features */}
         <AnimatePresence>
           {showForm && (
             <motion.div
@@ -345,7 +361,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                     className={`text-xs ${colors.accent}`}
                     style={themeColor === 'custom' ? { color: customColor } : {}}
                   >
-                    ⚠️ Bắt buộc nhập đủ 7 đặc trưng để dự đoán Total.MomentaryFuel (kg/s)
+                    ⚠️ Bắt buộc nhập đủ 8 đặc trưng để dự đoán Total.MomentaryFuel (kg/s)
                   </p>
                   {savedInputs.length > 0 && (
                     <p className={`text-[10px] ${colors.accent} opacity-60`}>
@@ -464,7 +480,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                   </div>
                 </div>
 
-                {/* Row 3: Ocean Current Velocity */}
+                {/* Row 3: Ocean Current Velocity & Ship Type */}
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className={`text-xs ${colors.text} block mb-1.5`}>
@@ -483,7 +499,26 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                       style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
                     />
                   </div>
-                  <div></div>
+                  <div>
+                    <label className={`text-xs ${colors.text} block mb-1.5`}>
+                      {language === 'vi' ? 'Loại tàu' : 'Ship Type'}*
+                    </label>
+                    <Select value={shipType} onValueChange={setShipType}>
+                      <SelectTrigger
+                        className={`${colors.inputBg} border-2 ${colors.border} ${colors.text} h-9 text-xs`}
+                        style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
+                      >
+                        <SelectValue placeholder={language === 'vi' ? 'Chọn loại tàu' : 'Pick ship type'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SHIP_TYPE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value} className="text-xs">
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div></div>
                 </div>
 

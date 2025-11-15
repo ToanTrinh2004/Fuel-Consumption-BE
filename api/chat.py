@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+import json
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request
@@ -16,12 +17,45 @@ from models.response import ChatWithPredictionResponse, PredictionResponse, Chat
 from services import model_service
 from services.llm_service import llm_service
 from services.model_service import model_service
-from core.supportfunc import extract_params,get_example_response
+from core.supportfunc import extract_params, get_example_response
 
 
 chat_bp = Blueprint("chat", __name__)
 
 DEFAULT_BOT_REPLY = "Hien tai chua ket noi LM Studio"
+
+
+def _extract_structured_inputs(context_messages: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    for ctx in context_messages:
+        content = ctx.get("content")
+        if not isinstance(content, str):
+            continue
+        start = content.find("{")
+        end = content.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            continue
+        json_payload = content[start : end + 1]
+        try:
+            return json.loads(json_payload)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _params_to_form_data(params: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not params:
+        return None
+
+    return {
+        "speedOverGround": params.get("Ship_SpeedOverGround"),
+        "windSpeed10M": params.get("Weather_WindSpeed10M"),
+        "waveHeight": params.get("Weather_WaveHeight"),
+        "wavePeriod": params.get("Weather_WavePeriod"),
+        "seaFloorDepth": params.get("Environment_SeaFloorDepth"),
+        "temperature2M": params.get("Weather_Temperature2M"),
+        "oceanCurrentVelocity": params.get("Weather_OceanCurrentVelocity"),
+        "shipType": params.get("ship_type"),
+    }
 
 
 def _message_to_dict(message: Message) -> Dict[str, Any]:
@@ -218,7 +252,9 @@ def chat_with_auto_prediction():
         conversation_id = data.get("conversation_id")
         conversation_id = int(conversation_id)
         print(context)
+        structured_params = None
         if isinstance(context, list) and context:
+            structured_params = _extract_structured_inputs(context)
             messages = context + messages
         test =   get_conversation(conversation_id)
         print("test conversation",test)
@@ -226,7 +262,7 @@ def chat_with_auto_prediction():
         user_message_content = messages[-1].get("content", "")
         print("test get conversation")
         print(data["messages"]) 
-        extracted = extract_params(user_message_content.lower(), conversation_id, db.session)
+        extracted = extract_params(user_message_content, conversation_id, db.session, structured_params)
         # store new message of user to DB
         user_msg = Message(
         conversation_id=conversation_id,
@@ -237,6 +273,7 @@ def chat_with_auto_prediction():
         db.session.commit()
         
         response_payload: Dict[str, Any]
+        metadata_payload: Optional[Dict[str, Any]] = None
         if extracted is False:
             user_message = user_message_content.lower()
             response = get_example_response(db.session, user_message)
@@ -250,12 +287,33 @@ def chat_with_auto_prediction():
         else:
             print("Extracted parameters:")
             print(extracted)
-            assistant_reply = extracted.get("llm_response", "")
-            response_payload = extracted
+            assistant_reply = extracted.get("llm_response") or extracted.get("message", "")
+            prediction_value = extracted.get("prediction") or extracted.get("result")
+            params = extracted.get("params")
+            params = params if isinstance(params, dict) else {}
+            form_data = structured_params or _params_to_form_data(params)
+            prediction_result = None
+            if prediction_value is not None:
+                prediction_result = {
+                    "fuel_consumption": prediction_value,
+                    "parameters": form_data or params,
+                }
+            response_payload = {
+                "response": assistant_reply,
+                "prediction_made": prediction_result is not None,
+                "prediction_result": prediction_result,
+            }
+            if prediction_result:
+                metadata_payload = {
+                    "prediction_made": True,
+                    "prediction_result": prediction_result,
+                    "form_data": form_data or params,
+                }
         assistant_msg = Message(
             conversation_id=conversation_id,
             role="assistant",
-            content=str(assistant_reply)
+            content=str(assistant_reply),
+            metadata_json=metadata_payload,
         )
         db.session.add(assistant_msg)
         db.session.commit()

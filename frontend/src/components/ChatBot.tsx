@@ -10,7 +10,7 @@ import HelpDialog from './HelpDialog';
 import { Button } from './ui/button';
 import { LogOut, BarChart3, Sparkles, Download, Lightbulb, PanelLeftClose, PanelLeft, Sun, Moon, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import type { Conversation, MockMessage } from '../utils/mockData';
+import type { Conversation, MockMessage, DashboardData } from '../utils/mockData';
 import { smartSuggestions } from '../utils/mockData';
 import { toast } from 'sonner@2.0.3';
 import { Resizable } from 're-resizable';
@@ -89,15 +89,123 @@ const generateMockFuelData = (features: any = {}) => {
   return predictions;
 };
 
+const buildDashboardData = (formData: any, predictionValue?: number) => {
+  if (!formData) return null;
+
+  const normalizedForm = {
+    speedOverGround: normalizeNumber(formData.speedOverGround ?? formData.Ship_SpeedOverGround, 12),
+    windSpeed10M: normalizeNumber(formData.windSpeed10M ?? formData.Weather_WindSpeed10M, 10),
+    waveHeight: normalizeNumber(formData.waveHeight ?? formData.Weather_WaveHeight, 1.5),
+    wavePeriod: normalizeNumber(formData.wavePeriod ?? formData.Weather_WavePeriod, 8),
+    seaFloorDepth: normalizeNumber(
+      formData.seaFloorDepth ?? formData.Environment_SeaFloorDepth,
+      120
+    ),
+    temperature2M: normalizeNumber(formData.temperature2M ?? formData.Weather_Temperature2M, 24),
+    oceanCurrentVelocity: normalizeNumber(
+      formData.oceanCurrentVelocity ?? formData.Weather_OceanCurrentVelocity,
+      1.2
+    ),
+    shipType: formData.shipType || formData.vesselType || 'container_1_tier1',
+  };
+
+  const predictions = generateMockFuelData(normalizedForm);
+  const stats = {
+    average: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0) / predictions.length,
+    max: Math.max(...predictions.map(p => p.fuelConsumption)),
+    min: Math.min(...predictions.map(p => p.fuelConsumption)),
+    total: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0),
+  };
+
+  const timeSeriesData = predictions.map(p => ({
+    time: p.time,
+    consumption: p.fuelConsumption,
+    speed: normalizedForm.speedOverGround,
+  }));
+
+  const comparison = [
+    { metric: 'Speed', current: normalizedForm.speedOverGround, optimal: 10 },
+    { metric: 'Wave Impact', current: normalizedForm.waveHeight, optimal: 1.2 },
+    { metric: 'Wind Impact', current: normalizedForm.windSpeed10M, optimal: 6 },
+  ];
+
+  const totalKg = predictionValue ?? stats.total * 900;
+
+  return {
+    query: formData.query || 'Fluxmare Fuel Insight',
+    analysis: {
+      fuelConsumption: totalKg,
+      fuelConsumptionTons: totalKg / 1000,
+      estimatedCost: (totalKg / 1000) * 620,
+      efficiency: Math.max(
+        0,
+        Math.min(100, 100 - (normalizedForm.waveHeight * 5 + normalizedForm.windSpeed10M * 2))
+      ),
+      avgConsumptionRate: stats.average,
+      recommendation: normalizedForm.speedOverGround > 11
+        ? 'Giam toc do de toi uu nhien lieu'
+        : 'Duy tri toc do hien tai de giu hieu qua',
+    },
+    vesselInfo: {
+      type: normalizedForm.shipType,
+      speedCalc: normalizedForm.speedOverGround,
+      distance: normalizedForm.speedOverGround * 24,
+      datetime: new Date().toISOString(),
+    },
+    timeSeriesData,
+    comparison,
+    timestamp: new Date(),
+    inputFeatures: {
+      Ship_SpeedOverGround: normalizedForm.speedOverGround,
+      Weather_WindSpeed10M: normalizedForm.windSpeed10M,
+      Weather_WaveHeight: normalizedForm.waveHeight,
+      Weather_WavePeriod: normalizedForm.wavePeriod,
+      Environment_SeaFloorDepth: normalizedForm.seaFloorDepth,
+      Weather_Temperature2M: normalizedForm.temperature2M,
+      Weather_OceanCurrentVelocity: normalizedForm.oceanCurrentVelocity,
+    },
+    prediction: {
+      Total_MomentaryFuel: (predictionValue ?? stats.average) / 3600,
+    },
+  };
+};
+
 type ConversationState = Conversation & { hasLoadedHistory?: boolean };
 
-const mapApiMessageToMock = (message: ConversationMessageDTO): MockMessage => ({
-  id: String(message.id),
-  type: message.role === 'assistant' ? 'bot' : 'user',
-  content: message.content,
-  timestamp: message.created_at ? new Date(message.created_at) : new Date(),
-  metadata: message.metadata ?? undefined,
-});
+const mapApiMessageToMock = (message: ConversationMessageDTO): MockMessage => {
+  const metadata = message.metadata ?? undefined;
+  let dashboardData: DashboardData | undefined;
+  let isFuelPrediction = false;
+
+  if (metadata && typeof metadata === 'object') {
+    const meta = metadata as Record<string, any>;
+    const formData =
+      (meta.form_data as Record<string, unknown>) ||
+      (meta.parameters as Record<string, unknown>) ||
+      (meta.prediction_result?.parameters as Record<string, unknown>) ||
+      undefined;
+    const fuelConsumption =
+      meta.prediction_result?.fuel_consumption ??
+      meta.fuel_consumption ??
+      undefined;
+
+    const built = buildDashboardData(formData, fuelConsumption);
+    if (built) {
+      dashboardData = built;
+      isFuelPrediction = true;
+    }
+  }
+
+  return {
+    id: String(message.id),
+    type: message.role === 'assistant' ? 'bot' : 'user',
+    content: message.content,
+    timestamp: message.created_at ? new Date(message.created_at) : new Date(),
+    metadata,
+    isFuelPrediction: isFuelPrediction || Boolean((metadata as any)?.prediction_made),
+    dashboardData,
+  };
+};
 
 const mapApiConversationToState = (conversation: ConversationDTO): ConversationState => {
   const messages = conversation.messages
@@ -123,76 +231,6 @@ const mapApiConversationToState = (conversation: ConversationDTO): ConversationS
 
 const sortConversations = (items: ConversationState[]) =>
   [...items].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-const buildDashboardData = (formData: any, predictionValue?: number) => {
-  if (!formData) return null;
-
-  const predictions = generateMockFuelData(formData);
-  const stats = {
-    average: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0) / predictions.length,
-    max: Math.max(...predictions.map(p => p.fuelConsumption)),
-    min: Math.min(...predictions.map(p => p.fuelConsumption)),
-    total: predictions.reduce((sum, p) => sum + p.fuelConsumption, 0),
-  };
-
-  const timeSeriesData = predictions.map(p => ({
-    time: p.time,
-    consumption: p.fuelConsumption,
-    speed: normalizeNumber(formData.speedOverGround, 12),
-  }));
-
-  const comparison = [
-    { metric: 'Speed', current: normalizeNumber(formData.speedOverGround, 12), optimal: 10 },
-    { metric: 'Wave Impact', current: normalizeNumber(formData.waveHeight, 2), optimal: 1.2 },
-    { metric: 'Wind Impact', current: normalizeNumber(formData.windSpeed10M, 8), optimal: 6 },
-  ];
-
-  const totalKg = predictionValue ?? stats.total * 900;
-
-  return {
-    query: formData.query || 'Fluxmare Fuel Insight',
-    analysis: {
-      fuelConsumption: totalKg,
-      fuelConsumptionTons: totalKg / 1000,
-      estimatedCost: (totalKg / 1000) * 620,
-      efficiency: Math.max(
-        0,
-        Math.min(
-          100,
-          100 -
-            (normalizeNumber(formData.waveHeight, 2) * 5 +
-              normalizeNumber(formData.windSpeed10M, 8) * 2)
-        )
-      ),
-      avgConsumptionRate: stats.average,
-      recommendation:
-        normalizeNumber(formData.speedOverGround, 12) > 11
-          ? 'Giam toc do de toi uu nhien lieu'
-          : 'Duy tri toc do hien tai de giu hieu qua',
-    },
-    vesselInfo: {
-      type: formData.vesselType || 'container_1_tier1',
-      speedCalc: normalizeNumber(formData.speedOverGround, 12),
-      distance: normalizeNumber(formData.speedOverGround, 12) * 24,
-      datetime: new Date().toISOString(),
-    },
-    timeSeriesData,
-    comparison,
-    timestamp: new Date(),
-    inputFeatures: {
-      Ship_SpeedOverGround: normalizeNumber(formData.speedOverGround, 12),
-      Weather_WindSpeed10M: normalizeNumber(formData.windSpeed10M, 10),
-      Weather_WaveHeight: normalizeNumber(formData.waveHeight, 1.5),
-      Weather_WavePeriod: normalizeNumber(formData.wavePeriod, 8),
-      Environment_SeaFloorDepth: normalizeNumber(formData.seaFloorDepth, 120),
-      Weather_Temperature2M: normalizeNumber(formData.temperature2M, 24),
-      Weather_OceanCurrentVelocity: normalizeNumber(formData.oceanCurrentVelocity, 1.2),
-    },
-    prediction: {
-      Total_MomentaryFuel: (predictionValue ?? stats.average) / 3600,
-    },
-  };
-};
 
 const buildContextMessages = (formData: any, language: Language): ChatCompletionMessage[] => {
   if (!formData) return [];
@@ -443,16 +481,34 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
       const assistantContent = chatResponse.response?.trim() || generateBotResponse(trimmedContent);
       tempAssistantId = `temp-bot-${Date.now()}`;
 
+      const metadataPayload =
+        chatResponse.prediction_made && chatResponse.prediction_result
+          ? {
+              prediction_made: true,
+              prediction_result: chatResponse.prediction_result,
+              form_data:
+                (formData && Object.keys(formData).length ? formData : undefined) ||
+                chatResponse.prediction_result.parameters,
+            }
+          : undefined;
+
+      const dashboardSource =
+        (formData && Object.keys(formData).length ? formData : undefined) ||
+        chatResponse.prediction_result?.parameters;
+
       const assistantMessage: MockMessage = {
         id: tempAssistantId,
         type: 'bot',
         content: assistantContent,
         timestamp: new Date(),
-        metadata: chatResponse.prediction_result ?? undefined,
+        metadata: metadataPayload ?? undefined,
         isFuelPrediction: Boolean(chatResponse.prediction_made && chatResponse.prediction_result),
         dashboardData:
           chatResponse.prediction_made && chatResponse.prediction_result
-            ? buildDashboardData(formData, chatResponse.prediction_result.fuel_consumption) || undefined
+            ? buildDashboardData(
+                dashboardSource,
+                chatResponse.prediction_result.fuel_consumption
+              ) || undefined
             : undefined,
       };
 

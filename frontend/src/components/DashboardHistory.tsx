@@ -57,6 +57,30 @@ export default function DashboardHistory({
     });
   };
 
+  const formatNumber = (value: number | null | undefined, digits = 1) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return 'N/A';
+    }
+    return value.toFixed(digits);
+  };
+
+  const formatWithUnit = (value: string, unit: string) => {
+    if (value === 'N/A') {
+      return value;
+    }
+    return `${value} ${unit}`;
+  };
+
+  const formatPredictionValue = (data: DashboardData) => {
+    const prediction = data.prediction?.Total_MomentaryFuel;
+    const fallback =
+      typeof data.analysis?.fuelConsumption === 'number'
+        ? data.analysis.fuelConsumption / 3600
+        : undefined;
+    const value = typeof prediction === 'number' && Number.isFinite(prediction) ? prediction : fallback;
+    return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : 'N/A';
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -121,143 +145,165 @@ export default function DashboardHistory({
         {/* Content */}
         <ScrollArea className="h-[calc(80vh-8rem)]">
           <div className="p-6 space-y-3">
-            {dashboards.length === 0 ? (
-              <div className="text-center py-12">
-                <BarChart3 
-                  className="h-16 w-16 mx-auto mb-4 opacity-30" 
-                  style={{ color: accentColor }}
-                />
-                <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                  {language === 'vi' ? 'Chưa có Dashboard nào được tạo' : 'No dashboards created yet'}
-                </p>
-                <p className={`text-xs mt-2 ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
-                  {language === 'vi' ? 'Nhập 7 thông số để tạo Dashboard phân tích' : 'Input 7 features to create analysis dashboard'}
-                </p>
-              </div>
-            ) : (
-              dashboards.map((dashboard, index) => (
-                <motion.div
-                  key={dashboard.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className={`group p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                    isDarkMode 
-                      ? 'bg-slate-800/50 border-slate-700 hover:border-slate-600' 
-                      : 'bg-white border-slate-200 hover:border-slate-300'
-                  }`}
-                  onClick={() => {
-                    onSelectDashboard(dashboard.data);
-                    onClose();
-                  }}
-                  whileHover={{ scale: 1.01 }}
-                  whileTap={{ scale: 0.99 }}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      {/* Title with analysis number */}
-                      <div className="flex items-center gap-2 mb-2">
-                        <div 
-                          className="px-2 py-0.5 rounded text-xs"
-                          style={{
-                            backgroundColor: `${accentColor}20`,
-                            color: accentColor
-                          }}
-                        >
-                          Phân tích #{dashboards.length - index}
-                        </div>
-                        <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
-                          <Clock className="h-3 w-3 inline mr-1" />
-                          {formatDate(dashboard.timestamp)}
-                        </span>
-                      </div>
-
-                      {/* Query info */}
-                      <h3 
-                        className={`text-sm mb-2 truncate ${
-                          isDarkMode ? 'text-slate-200' : 'text-slate-900'
-                        }`}
+            
+          {dashboards.length === 0 ? (
+            <div className="text-center py-12">
+              <BarChart3
+                className="h-16 w-16 mx-auto mb-4 opacity-30"
+                style={{ color: accentColor }}
+              />
+              <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                {language === 'vi'
+                  ? 'Chưa có Dashboard nào được tạo'
+                  : 'No dashboards created yet'}
+              </p>
+              <p className={`text-xs mt-2 ${isDarkMode ? 'text-slate-500' : 'text-slate-500'}`}>
+                {language === 'vi'
+                  ? 'Nhập 8 thông số để tạo Dashboard phân tích'
+                  : 'Input 8 features to create analysis dashboard'}
+              </p>
+            </div>
+          ) : (
+            dashboards.map((dashboard, index) => (
+              <motion.div
+                key={dashboard.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className={`group p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                    : 'bg-white border-slate-200 hover:border-slate-300'
+                }`}
+                onClick={() => {
+                  onSelectDashboard(dashboard.data);
+                  onClose();
+                }}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div
+                        className="px-2 py-0.5 rounded text-xs"
+                        style={{
+                          backgroundColor: `${accentColor}20`,
+                          color: accentColor,
+                        }}
                       >
-                        {dashboard.data.query}
-                      </h3>
-
-                      {/* 7 Input Features + Prediction */}
-                      <div className="space-y-2 text-xs">
-                        <div className={`${isDarkMode ? 'text-slate-300' : 'text-slate-700'} space-y-1`}>
-                          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Speed:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Ship_SpeedOverGround?.toFixed(1) || dashboard.data.vesselInfo.speedCalc?.toFixed(1) || 'N/A'} m/s
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Wind:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Weather_WindSpeed10M?.toFixed(1) || '8.5'} m/s
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Wave H:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Weather_WaveHeight?.toFixed(1) || '2.0'} m
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Wave P:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Weather_WavePeriod?.toFixed(1) || '6.0'} s
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Depth:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Environment_SeaFloorDepth?.toFixed(0) || '255'} m
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Temp:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Weather_Temperature2M?.toFixed(1) || '20.0'}°C
-                              </span>
-                            </div>
-                            <div>
-                              <span className={isDarkMode ? 'text-slate-500' : 'text-slate-500'}>Current:</span>
-                              <span className="ml-1" style={{ color: accentColor }}>
-                                {dashboard.data.inputFeatures?.Weather_OceanCurrentVelocity?.toFixed(1) || '0.5'} m/s
-                              </span>
-                            </div>
-                          </div>
-                          
-                          {/* Prediction Result */}
-                          <div className={`pt-2 mt-2 border-t ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
-                            <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>
-                              🎯 Prediction:
-                            </span>
-                            <span className="ml-1" style={{ color: accentColor }}>
-                              {dashboard.data.prediction?.Total_MomentaryFuel?.toFixed(4) || (dashboard.data.analysis.fuelConsumption / 3600).toFixed(4)} kg/s
-                            </span>
-                          </div>
-                        </div>
+                        Phân tích #{dashboards.length - index}
                       </div>
+                      <span className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-slate-600'}`}>
+                        <Clock className="h-3 w-3 inline mr-1" />
+                        {formatDate(dashboard.timestamp)}
+                      </span>
                     </div>
 
-                    {/* Action button */}
-                    <div 
-                      className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform"
-                      style={{
-                        backgroundColor: `${accentColor}15`
-                      }}
+                    <h3
+                      className={`text-sm mb-2 truncate ${
+                        isDarkMode ? 'text-slate-200' : 'text-slate-900'
+                      }`}
                     >
-                      <TrendingUp 
-                        className="h-4 w-4" 
-                        style={{ color: accentColor }}
-                      />
+                      {dashboard.data.query}
+                    </h3>
+
+                    <div className="space-y-2 text-xs">
+                      <div className={`${isDarkMode ? 'text-slate-300' : 'text-slate-700'} space-y-1`}>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                          {[
+                            {
+                              label: 'Speed',
+                              value: formatWithUnit(
+                                formatNumber(
+                                  dashboard.data.inputFeatures?.Ship_SpeedOverGround ??
+                                    dashboard.data.vesselInfo.speedCalc,
+                                  1
+                                ),
+                                'm/s'
+                              ),
+                            },
+                            {
+                              label: 'Wind',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Weather_WindSpeed10M, 1),
+                                'm/s'
+                              ),
+                            },
+                            {
+                              label: 'Wave H',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Weather_WaveHeight, 1),
+                                'm'
+                              ),
+                            },
+                            {
+                              label: 'Wave P',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Weather_WavePeriod, 1),
+                                's'
+                              ),
+                            },
+                            {
+                              label: 'Depth',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Environment_SeaFloorDepth, 0),
+                                'm'
+                              ),
+                            },
+                            {
+                              label: 'Temp',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Weather_Temperature2M, 1),
+                                '°C'
+                              ),
+                            },
+                            {
+                              label: 'Current',
+                              value: formatWithUnit(
+                                formatNumber(dashboard.data.inputFeatures?.Weather_OceanCurrentVelocity, 1),
+                                'm/s'
+                              ),
+                            },
+                            {
+                              label: 'Ship',
+                              value: dashboard.data.vesselInfo?.type || 'N/A',
+                            },
+                          ].map(({ label, value }) => (
+                            <div key={label}>
+                              <span className={isDarkMode ? 'text-slate-400' : 'text-slate-500'}>
+                                {label}:
+                              </span>
+                              <span className="ml-1" style={{ color: accentColor }}>
+                                {value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className={`pt-2 mt-2 border-t ${isDarkMode ? 'border-slate-700' : 'border-slate-300'}`}>
+                          <span className={isDarkMode ? 'text-slate-400' : 'text-slate-600'}>
+                            📊 Prediction:
+                          </span>
+                          <span className="ml-1" style={{ color: accentColor }}>
+                            {formatPredictionValue(dashboard.data)} kg/s
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </motion.div>
-              ))
-            )}
+
+                  <div
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform"
+                    style={{ backgroundColor: `${accentColor}15` }}
+                  >
+                    <TrendingUp className="h-4 w-4" style={{ color: accentColor }} />
+                  </div>
+                </div>
+              </motion.div>
+            ))
+          )}
+
           </div>
         </ScrollArea>
 

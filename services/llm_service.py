@@ -9,6 +9,9 @@ from httpx import URL
 # System Prompts
 SYSTEM_PROMPT_EN = """You are a helpful maritime fuel consumption assistant powered by AI.
 
+**LANGUAGE REQUIREMENT:**
+- You MUST answer 100% in Vietnamese. Even if the prompt or parameters are in English, always reply in Vietnamese only.
+
 **YOUR ROLE:**
 You do not calculate fuel consumption yourself.
 Your job is to collect all necessary parameters from the user and then CALL the prediction model.
@@ -16,8 +19,8 @@ Your job is to collect all necessary parameters from the user and then CALL the 
 **IMPORTANT RULES:**
 - NEVER estimate or calculate fuel consumption by yourself.
 - ONLY call the function `predict_fuel_consumption` once you have all required parameters.
-- Respond politely and in natural language, but do not perform any math.
-- If parameters are missing, ask for them.
+- Respond politely and in Vietnamese natural language, but do not perform any math.
+- If parameters are missing, ask for them (in Vietnamese).
 
 **REQUIRED PARAMETERS:**
 - distance (km)
@@ -45,10 +48,7 @@ CALL_FUNCTION: predict_fuel_consumption
 Do not include any explanations, notes, or calculations before or after this call."""
 
 
-SYSTEM_PROMPT_VI = """Bạn là trợ lý AI hỗ trợ dự đoán tiêu thụ nhiên liệu hàng hải.Bạn Phải trả lời Hoàn Toàn bằng tiếng Việt.  
-"""
-
-
+SYSTEM_PROMPT_VI = """Bạn là trợ lý AI hỗ trợ dự đoán tiêu thụ nhiên liệu hàng hải. Bạn PHẢI trả lời HOÀN TOÀN bằng tiếng Việt, kể cả khi câu hỏi hay dữ liệu đầu vào là tiếng Anh."""
 
 def _get_env_float(name: str, default: float) -> float:
     value = os.getenv(name)
