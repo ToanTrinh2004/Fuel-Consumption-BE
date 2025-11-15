@@ -208,23 +208,16 @@ def predict_endpoint():
     except Exception as e:
         raise InternalServerError(description=f"Prediction error: {str(e)}")
     
-@chat_bp.route("/chat/<int:conversation_id>", methods=["POST"])
-def chat_with_auto_prediction(conversation_id: int):
+@chat_bp.route("/chat", methods=["POST"])
+def chat_with_auto_prediction():
     try:
-        data = request.get_json() or {}
+        data = request.get_json()
         messages = data.get("messages", [])
         language = data.get("language", "en")
         context = data.get("context", [])
         conversation_id = data.get("conversation_id")
-
-        conversation: Optional[Conversation] = None
-        if conversation_id is not None:
-            conversation = Conversation.query.get(conversation_id)
-            if not conversation:
-                return jsonify({"error": "Conversation khong ton tai"}), 404
-            if conversation.user_id != current_user.id:
-                return jsonify({"error": "Khong the truy cap cuoc tro chuyen nay"}), 403
-
+        conversation_id = int(conversation_id)
+        print(context)
         if isinstance(context, list) and context:
             messages = context + messages
         test =   get_conversation(conversation_id)
