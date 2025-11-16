@@ -42,6 +42,8 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
   const [seaFloorDepth, setSeaFloorDepth] = useState('');
   const [temperature2M, setTemperature2M] = useState('');
   const [oceanCurrentVelocity, setOceanCurrentVelocity] = useState('');
+  const [shipType, setShipType] = useState("");
+
   
   const [textMessage, setTextMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -84,6 +86,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
     }
 
     // Validate ranges based on provided min/max/mean
+    const shipType =  "ceto"; // Placeholder, can be extended for different ship types
     const speed = parseFloat(speedOverGround);
     const windSpeed = parseFloat(windSpeed10M);
     const height = parseFloat(waveHeight);
@@ -151,7 +154,19 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
     setSavedInputs(newSavedInputs);
     localStorage.setItem('fluxmare_saved_inputs', JSON.stringify(newSavedInputs));
 
-    const message = `📊 Dự đoán Total.MomentaryFuel với 7 features:\n• Ship_SpeedOverGround: ${speed} m/s\n• Weather_WindSpeed10M: ${windSpeed} m/s | WaveHeight: ${height} m | WavePeriod: ${period} s\n• Environment_SeaFloorDepth: ${depth} m | Temperature2M: ${temp}°C | OceanCurrentVelocity: ${currentVel} m/s`;
+    const message = `
+📊 Dự đoán Total.MomentaryFuel với 7 features:
+
+Tốc độ: ${speed}
+Độ sâu: ${depth}
+Nhiệt độ: ${temp}
+Dòng chảy: ${currentVel}
+Gió: ${windSpeed}
+Độ cao sóng: ${height}
+Chu kỳ sóng: ${period}
+Loại tàu: ${shipType}
+`;
+
     
     onSendMessage(message, formData);
     
@@ -160,6 +175,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
     });
 
     // Reset form
+    setShipType("");
     setSpeedOverGround('');
     setWindSpeed10M('');
     setWaveHeight('');
@@ -172,6 +188,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
   const loadSavedInput = (inputId: string) => {
     const saved = savedInputs.find(s => s.id === inputId);
     if (saved) {
+      setShipType(saved.data.shipType);
       setSpeedOverGround(saved.data.speedOverGround);
       setWindSpeed10M(saved.data.windSpeed10M);
       setWaveHeight(saved.data.waveHeight);
@@ -354,8 +371,26 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                   )}
                 </div>
 
+                  
                 {/* Row 1: Ship Speed, Wind Speed, Wave Height */}
                 <div className="grid grid-cols-3 gap-3">
+                <div>
+                    <label className={`text-xs ${colors.text} block mb-1.5`}>
+                      {language === 'vi' ? 'Loại tàu' : 'Ship Type'}*
+                    </label>
+
+                    <select
+                      value={shipType}
+                      onChange={(e) => setShipType(e.target.value)}
+                      className={`${colors.inputBg} border-2 ${colors.border} ${colors.inputText} h-9 text-xs w-full rounded-md px-2`}
+                      style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
+                    >
+                      <option value="ceto">Ceto</option>
+                      <option value="poisedon">Poisedon</option>
+                      <option value="triton">Triton</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className={`text-xs ${colors.text} block mb-1.5`}>
                       {language === 'vi' ? 'Tốc độ tàu' : 'Ship Speed'}* (m/s)
@@ -390,23 +425,7 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                       style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
                     />
                   </div>
-                  <div>
-                    <label className={`text-xs ${colors.text} block mb-1.5`}>
-                      {language === 'vi' ? 'Độ cao sóng' : 'Wave Height'}* (m)
-                      <span className="text-[10px] opacity-60 ml-1">{language === 'vi' ? 'TB' : 'Mean'}: 0.72</span>
-                    </label>
-                    <Input
-                      type="number"
-                      placeholder="0.01 - 20"
-                      value={waveHeight}
-                      onChange={(e) => setWaveHeight(e.target.value)}
-                      min="0.01"
-                      max="20"
-                      step="0.01"
-                      className={`${colors.inputBg} border-2 ${colors.border} ${colors.inputText} h-9 text-xs`}
-                      style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
-                    />
-                  </div>
+                  
                 </div>
 
                 {/* Row 2: Wave Period, Sea Floor Depth, Temperature */}
@@ -478,6 +497,23 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                       onChange={(e) => setOceanCurrentVelocity(e.target.value)}
                       min="0"
                       max="5"
+                      step="0.01"
+                      className={`${colors.inputBg} border-2 ${colors.border} ${colors.inputText} h-9 text-xs`}
+                      style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-xs ${colors.text} block mb-1.5`}>
+                      {language === 'vi' ? 'Độ cao sóng' : 'Wave Height'}* (m)
+                      <span className="text-[10px] opacity-60 ml-1">{language === 'vi' ? 'TB' : 'Mean'}: 0.72</span>
+                    </label>
+                    <Input
+                      type="number"
+                      placeholder="0.01 - 20"
+                      value={waveHeight}
+                      onChange={(e) => setWaveHeight(e.target.value)}
+                      min="0.01"
+                      max="20"
                       step="0.01"
                       className={`${colors.inputBg} border-2 ${colors.border} ${colors.inputText} h-9 text-xs`}
                       style={themeColor === 'custom' ? { borderColor: customColor + '60' } : {}}

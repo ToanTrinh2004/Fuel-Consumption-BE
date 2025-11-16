@@ -250,8 +250,8 @@ def chat_with_auto_prediction():
         else:
             print("Extracted parameters:")
             print(extracted)
-            assistant_reply = extracted.get("llm_response", "")
-            response_payload = extracted
+            assistant_reply = extracted.get("message") + " "+ extracted.get("llm_response")
+            response_payload = {"response":assistant_reply} 
         assistant_msg = Message(
             conversation_id=conversation_id,
             role="assistant",

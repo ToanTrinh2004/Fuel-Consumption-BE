@@ -368,17 +368,17 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
       return;
     }
     setIsSendingMessage(true);
-
+  
     let conversationId = activeConversationId;
     let conversationState = conversations.find(conv => conv.id === conversationId);
     const tempUserId = `temp-${Date.now()}`;
     let tempAssistantId: string | null = null;
-
+  
     try {
       setShowSuggestions(false);
-
+  
       if (!conversationId || !conversationState) {
-        const title = trimmedContent.slice(0, 50) || 'Cuoc tro chuyen moi';
+        const title = trimmedContent.slice(0, 50) || 'New Conversation';
         const created = await chatService.createConversation(title);
         const mappedConversation = mapApiConversationToState(created);
         conversationId = mappedConversation.id;
@@ -389,49 +389,39 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
           return sortConversations([mappedConversation, ...filtered]);
         });
       }
-
+  
       if (!conversationId || !conversationState) {
-        throw new Error('Khong the tao cuoc tro chuyen moi.');
+        throw new Error('Unable to create a new conversation.');
       }
-
+  
       const tempUserMessage: MockMessage = {
         id: tempUserId,
         type: 'user',
         content: trimmedContent,
         timestamp: new Date(),
       };
-
-      const optimisticMessages = [...conversationState.messages, tempUserMessage];
-
+  
+      // Add user message optimistically
       setConversations(prev => {
-        const exists = prev.some(conv => conv.id === conversationId);
-        const next = exists
-          ? prev.map(conv =>
-              conv.id === conversationId
-                ? {
-                    ...conv,
-                    messages: [...conv.messages, tempUserMessage],
-                    timestamp: new Date(),
-                    hasLoadedHistory: true,
-                  }
-                : conv
-            )
-          : [
-              {
-                ...conversationState,
-                messages: optimisticMessages,
+        const next = prev.map(conv =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: [...conv.messages, tempUserMessage],
+                timestamp: new Date(),
                 hasLoadedHistory: true,
-              },
-              ...prev,
-            ];
+              }
+            : conv
+        );
         return sortConversations(next);
       });
-
+  
+      const optimisticMessages = [...conversationState.messages, tempUserMessage];
       const payloadMessages: ChatCompletionMessage[] = optimisticMessages.map(msg => ({
         role: msg.type === 'bot' ? 'assistant' : 'user',
         content: msg.content,
       }));
-
+  
       const contextMessages = buildContextMessages(formData, language);
       const chatResponse = await chatService.chat({
         conversationId,
@@ -439,10 +429,11 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
         language,
         context: contextMessages.length ? contextMessages : undefined,
       });
-
+      console.log('Chat response:', chatResponse.response);
+  
       const assistantContent = chatResponse.response?.trim() || generateBotResponse(trimmedContent);
       tempAssistantId = `temp-bot-${Date.now()}`;
-
+  
       const assistantMessage: MockMessage = {
         id: tempAssistantId,
         type: 'bot',
@@ -455,13 +446,14 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
             ? buildDashboardData(formData, chatResponse.prediction_result.fuel_consumption) || undefined
             : undefined,
       };
-
+  
       if (assistantMessage.dashboardData) {
         setFuelPredictionData(assistantMessage.dashboardData);
         setShowDashboard(true);
         setIsComparisonMode(false);
       }
-
+  
+      // Update with assistant's message
       setConversations(prev =>
         sortConversations(
           prev.map(conv =>
@@ -475,7 +467,8 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
           )
         )
       );
-
+  
+      // Replace temp message with persisted one if available
       if (chatResponse.message) {
         const persistedAssistantMock = mapApiMessageToMock(chatResponse.message);
         setConversations(prev =>
@@ -495,9 +488,10 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
         );
       }
     } catch (error) {
-      toast.error('Khong the gui tin nhan', {
+      toast.error('Unable to send message', {
         description: getErrorMessage(error),
       });
+      // Remove temp messages on error
       if (conversationId) {
         setConversations(prev =>
           prev.map(conv =>
@@ -516,7 +510,6 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
       setIsSendingMessage(false);
     }
   };
-
   const handleSelectConversation = (conversationId: string) => {
     setActiveConversationId(conversationId);
     setShowDashboard(false);
