@@ -90,6 +90,35 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
 
   const colors = getColors();
 
+  const getHistoryFuel = (item: HistoryItem): number | null => {
+    const fromAnalysis = item.analysis?.fuelConsumption;
+    if (typeof fromAnalysis === 'number' && Number.isFinite(fromAnalysis)) {
+      return fromAnalysis;
+    }
+    const fromPrediction = item.prediction?.Total_MomentaryFuel;
+    if (typeof fromPrediction === 'number' && Number.isFinite(fromPrediction)) {
+      return fromPrediction * 3600;
+    }
+    return null;
+  };
+
+  const getFuelValue = (data: { fuelConsumptionKg?: number; Total_MomentaryFuel?: number }) => {
+    if (typeof data.fuelConsumptionKg === 'number' && Number.isFinite(data.fuelConsumptionKg)) {
+      return data.fuelConsumptionKg;
+    }
+    if (typeof data.Total_MomentaryFuel === 'number' && Number.isFinite(data.Total_MomentaryFuel)) {
+      return data.Total_MomentaryFuel * 3600;
+    }
+    return null;
+  };
+
+  const formatFuelDisplay = (value?: number | null, digits = 2) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return 'N/A';
+    }
+    return value >= 100 ? value.toFixed(1) : value.toFixed(digits);
+  };
+
   // Toggle selection
   const toggleSelection = (index: number) => {
     if (selectedItems.includes(index)) {
@@ -148,11 +177,13 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
     const item = dashboardHistory[index];
     const features = item.inputFeatures || generateMockFeatures(index);
     const prediction = item.prediction || generateMockPrediction();
+    const fuelConsumptionKg = getHistoryFuel(item);
     
     return {
       name: `#${dashboardHistory.length - index}`,
       ...features,
       Total_MomentaryFuel: prediction.Total_MomentaryFuel,
+      fuelConsumptionKg,
       timestamp: new Date(item.timestamp).toLocaleString('vi-VN', { 
         month: 'short', 
         day: 'numeric', 
@@ -233,11 +264,22 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
 
   // Generate AI analysis summary (RAG-style)
   const generateAIAnalysis = (optimal: any, allData: any[]) => {
-    // Calculate statistics
-    const avgFuel = allData.reduce((sum, d) => sum + d.Total_MomentaryFuel, 0) / allData.length;
-    const fuelSavingPercent = ((avgFuel - optimal.Total_MomentaryFuel) / avgFuel * 100).toFixed(1);
-    const maxFuel = Math.max(...allData.map(d => d.Total_MomentaryFuel));
-    const minFuel = Math.min(...allData.map(d => d.Total_MomentaryFuel));
+    const fuelValues = allData
+      .map(getFuelValue)
+      .filter((value): value is number => value !== null);
+
+    const optimalFuel = getFuelValue(optimal);
+
+    if (!fuelValues.length || optimalFuel === null) {
+      return language === 'vi'
+        ? 'Chưa có dữ liệu tiêu thụ nhiên liệu để so sánh.'
+        : 'No fuel consumption data available for comparison.';
+    }
+
+    const avgFuel = fuelValues.reduce((sum, val) => sum + val, 0) / fuelValues.length;
+    const fuelSavingPercent =
+      avgFuel > 0 ? ((avgFuel - optimalFuel) / avgFuel * 100).toFixed(1) : '0';
+    const maxFuel = Math.max(...fuelValues);
     
     // Build natural language analysis
     let analysis = `Dựa trên phân tích ${allData.length} predictions trong lịch sử, tôi nhận thấy ${optimal.name} có mức tiêu thụ nhiên liệu tối ưu nhất ở mức **${optimal.Total_MomentaryFuel.toFixed(3)} kg/s**`;
@@ -247,28 +289,27 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
     } else {
       analysis += `.`;
     }
-    
-    // Add environmental factors
+
     const envFactors = [];
-    
+
     if (optimal.Ship_SpeedOverGround >= 10 && optimal.Ship_SpeedOverGround <= 12) {
       envFactors.push(`tốc độ ${optimal.Ship_SpeedOverGround.toFixed(2)} kn nằm trong vùng kinh tế`);
     } else if (optimal.Ship_SpeedOverGround < 10) {
       envFactors.push(`tốc độ ${optimal.Ship_SpeedOverGround.toFixed(2)} kn khá thấp, giúp tiết kiệm nhiên liệu`);
     }
-    
+
     if (optimal.Weather_WaveHeight < 2.5) {
       envFactors.push(`sóng thuận lợi (${optimal.Weather_WaveHeight.toFixed(2)}m)`);
     }
-    
+
     if (optimal.Weather_WindSpeed10M < 10) {
       envFactors.push(`gió nhẹ (${optimal.Weather_WindSpeed10M.toFixed(2)} m/s)`);
     }
-    
+
     if (optimal.Weather_OceanCurrentVelocity < 1.5) {
       envFactors.push(`dòng chảy yếu (${optimal.Weather_OceanCurrentVelocity.toFixed(2)} m/s)`);
     }
-    
+
     if (envFactors.length > 0) {
       analysis += `\n\nCác yếu tố môi trường đóng góp: ${envFactors.join(', ')}.`;
     }
@@ -368,7 +409,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
             <div className="p-3 space-y-2">
               {dashboardHistory.map((item, index) => {
                 const features = item.inputFeatures || generateMockFeatures(index);
-                const prediction = item.prediction || generateMockPrediction();
+                const fuelConsumptionKg = getHistoryFuel(item);
                 
                 return (
                   <div
@@ -404,7 +445,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                         <div className={`grid grid-cols-2 gap-1 text-[9px] ${colors.textSecondary}`}>
                           <div>
                             <Fuel className="h-2 w-2 inline mr-1" />
-                            {prediction.Total_MomentaryFuel.toFixed(3)} kg/s
+                            {formatFuelDisplay(fuelConsumptionKg, 3)} kg
                           </div>
                           <div>
                             <Ship className="h-2 w-2 inline mr-1" />
@@ -457,7 +498,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                 </div>
               </div>
 
-              {/* Prediction Result - Total.MomentaryFuel */}
+              {/* Fuel Consumption Comparison */}
               <motion.div
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -467,10 +508,10 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                   <CardHeader className={`${colors.cardBg} p-3`}>
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Fuel className="h-4 w-4" />
-                      {t('prediction', language)}: Total.MomentaryFuel (kg/s)
+                      {t('fuelConsumption', language)} (kg)
                     </CardTitle>
                     <p className={`text-[10px] ${isDarkMode ? 'text-[#9ca3af]' : 'text-gray-600'} mt-0.5`}>
-                      {language === 'vi' ? 'Kết quả dự đoán tiêu thụ nhiên liệu tức thời' : 'Predicted momentary fuel consumption results'}
+                      {language === 'vi' ? 'Kết quả dự đoán tiêu thụ nhiên liệu tức thời' : 'Fuel consumption captured from dashboard history'}
                     </p>
                   </CardHeader>
                   <CardContent className="p-3">
@@ -494,11 +535,11 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                             fontSize: '10px',
                             padding: '6px 10px'
                           }}
-                          formatter={(value: number) => [`${value.toFixed(3)} kg/s`, getFeatureName('Fuel', language)]}
+                          formatter={(value: number) => [`${formatFuelDisplay(value, 3)} kg`, t('fuelConsumption', language)]}
                         />
                         <Line 
                           type="monotone" 
-                          dataKey="Total_MomentaryFuel" 
+                          dataKey="fuelConsumptionKg" 
                           stroke={colors.primary} 
                           strokeWidth={2.5}
                           dot={{ r: 4, fill: colors.primary }}
@@ -741,7 +782,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                           <tr className={`${isDarkMode ? 'bg-[#1a1a2e]' : 'bg-blue-50'}`}>
                             <td className={`py-2.5 pr-3 ${colors.text}`}>
                               <Fuel className="h-3 w-3 inline mr-1" />
-                              <strong>{getFeatureName('Fuel', language)} (kg/s)</strong>
+                              <strong>{t('fuelConsumption', language)} (kg)</strong>
                             </td>
                             {comparisonData.map((data, idx) => {
                               const isOptimal = optimalPrediction && optimalPrediction.index === idx;
@@ -755,7 +796,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                                   }`}
                                 >
                                   <strong>
-                                    {data.Total_MomentaryFuel.toFixed(3)}
+                                    {formatFuelDisplay(data.fuelConsumptionKg, 3)}
                                     {isOptimal && (
                                       <Sparkles className={`h-2.5 w-2.5 inline ml-1 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                                     )}

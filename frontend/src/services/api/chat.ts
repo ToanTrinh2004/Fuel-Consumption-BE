@@ -17,6 +17,8 @@ export interface ConversationDTO {
   updated_at?: string;
   last_message?: ConversationMessageDTO | null;
   messages?: ConversationMessageDTO[] | null;
+  message_count?: number;
+  first_user_message?: ConversationMessageDTO | null;
 }
 
 export interface ChatCompletionMessage {

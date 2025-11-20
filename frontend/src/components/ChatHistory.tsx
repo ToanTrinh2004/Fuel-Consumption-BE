@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import * as React from 'react';
 import { Button } from './ui/button';
-import { ScrollArea } from './ui/scroll-area';
-import { History, Trash2, Clock, MessageCircle, Star, ChevronDown, Search, MessageSquare } from 'lucide-react';
+import { History, Trash2, Clock, MessageCircle, Star, Search, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Conversation } from '../utils/mockData';
 import { ThemeColor } from '../App';
@@ -39,19 +38,50 @@ export default function ChatHistory({
   customColor,
   isLoading = false
 }: ChatHistoryProps) {
-  const [displayCount, setDisplayCount] = useState(5);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const totalQuestions = conversations.reduce((acc, conv) => 
-    acc + conv.messages.filter(m => m.type === 'user').length, 0
+  const totalAnalyses = conversations.reduce((acc, conv) =>
+    acc +
+    conv.messages.filter(m =>
+      m.type === 'bot' &&
+      (m.isFuelPrediction ||
+        Boolean(m.dashboardData) ||
+        Boolean((m.metadata as Record<string, any> | undefined)?.prediction_made) ||
+        Boolean((m.metadata as Record<string, any> | undefined)?.prediction_result))
+    ).length
+  , 0);
+
+  const responseStats = conversations.reduce(
+    (acc, conv) => {
+      conv.messages.forEach((message, index) => {
+        if (message.type !== 'bot') {
+          return;
+        }
+
+        if (typeof message.responseTime === 'number' && !Number.isNaN(message.responseTime)) {
+          acc.total += message.responseTime;
+          acc.count += 1;
+          return;
+        }
+
+        for (let i = index - 1; i >= 0; i -= 1) {
+          const prevMessage = conv.messages[i];
+          if (prevMessage.type === 'user') {
+            const diff = message.timestamp.getTime() - prevMessage.timestamp.getTime();
+            if (diff > 0) {
+              acc.total += diff;
+              acc.count += 1;
+            }
+            break;
+          }
+        }
+      });
+      return acc;
+    },
+    { total: 0, count: 0 }
   );
 
-  const allBotMessages = conversations.flatMap(conv => 
-    conv.messages.filter(m => m.type === 'bot' && m.responseTime)
-  );
-  const avgResponseTime = allBotMessages.length > 0
-    ? allBotMessages.reduce((acc, m) => acc + (m.responseTime || 0), 0) / allBotMessages.length
-    : 0;
+  const avgResponseTime = responseStats.count > 0 ? responseStats.total / responseStats.count : 0;
 
   const filteredConversations = conversations
     .filter(conv => 
@@ -60,10 +90,7 @@ export default function ChatHistory({
     )
     .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  const favoriteConversations = filteredConversations.filter(c => c.isFavorite);
-  const regularConversations = filteredConversations.filter(c => !c.isFavorite);
-  const displayedConversations = [...favoriteConversations, ...regularConversations].slice(0, displayCount);
-  const hasMore = displayCount < filteredConversations.length;
+  const displayedConversations = filteredConversations;
 
   // Theme colors based on themeColor and isDarkMode
   const getColors = (theme: ThemeColor, dark: boolean) => {
@@ -192,7 +219,7 @@ export default function ChatHistory({
               className="text-lg"
               style={{ color: getContrastColor(isDarkMode, themeColor, customColor) }}
             >
-              {totalQuestions}
+              {totalAnalyses}
             </div>
           </motion.div>
           <motion.div 
@@ -236,8 +263,8 @@ export default function ChatHistory({
         </div>
       </div>
 
-      {/* Scrollable conversations - SCROLLABLE */}
-      <ScrollArea className={`flex-1 p-2 ${colors.bg}`}>
+      {/* Scrollable conversations */}
+      <div className={`flex-1 min-h-0 overflow-y-auto p-2 ${colors.bg}`}>
         <div className="space-y-2">
           {isLoading ? (
             <div
@@ -263,86 +290,36 @@ export default function ChatHistory({
             </motion.div>
           ) : (
             <>
-              {favoriteConversations.length > 0 && displayCount > 0 && (
-                <div className="mb-3">
-                  <h3 
-                    className="text-xs mb-2 flex items-center gap-1"
-                    style={{ color: getContrastColor(isDarkMode, themeColor, customColor, 0.9) }}
-                  >
-                    <Star 
-                      className="h-3 w-3 fill-current" 
-                      style={{ color: getIconColor(isDarkMode, themeColor, customColor) }}
-                    /> 
-                    Yêu thích
-                  </h3>
-                  {favoriteConversations.slice(0, displayCount).map((conv, idx) => (
-                    <ConversationItem
-                      key={conv.id}
-                      conversation={conv}
-                      isActive={conv.id === activeConversationId}
-                      themeColor={themeColor}
-                      isDarkMode={isDarkMode}
-                      index={idx}
-                      customColor={customColor}
-                      onSelect={() => onSelectConversation(conv.id)}
-                      onToggleFavorite={() => onToggleFavorite(conv.id)}
-                      onDelete={() => onDeleteConversation(conv.id)}
-                    />
-                  ))}
-                </div>
-              )}
-              
-              {regularConversations.length > 0 && (
-                <div>
-                  <h3 
-                    className="text-xs mb-2 flex items-center gap-1"
-                    style={{ color: getContrastColor(isDarkMode, themeColor, customColor, 0.9) }}
-                  >
-                    <MessageCircle 
-                      className="h-3 w-3" 
-                      style={{ color: getIconColor(isDarkMode, themeColor, customColor) }}
-                    />
-                    Cuộc trò chuyện
-                  </h3>
-                  {displayedConversations.filter(c => !c.isFavorite).map((conv, idx) => (
-                    <ConversationItem
-                      key={conv.id}
-                      conversation={conv}
-                      isActive={conv.id === activeConversationId}
-                      themeColor={themeColor}
-                      isDarkMode={isDarkMode}
-                      index={idx}
-                      customColor={customColor}
-                      onSelect={() => onSelectConversation(conv.id)}
-                      onToggleFavorite={() => onToggleFavorite(conv.id)}
-                      onDelete={() => onDeleteConversation(conv.id)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {hasMore && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-2"
+              <div>
+                <h3 
+                  className="text-xs mb-2 flex items-center gap-1"
+                  style={{ color: getContrastColor(isDarkMode, themeColor, customColor, 0.9) }}
                 >
-                  <Button
-                    onClick={() => setDisplayCount(prev => prev + 5)}
-                    variant="outline"
-                    size="sm"
-                    className={`w-full border-2 ${colors.border} text-xs h-8`}
-                    style={{ color: getContrastColor(isDarkMode, themeColor, customColor, 0.9) }}
-                  >
-                    <ChevronDown className="h-3 w-3 mr-1" />
-                    Xem thêm ({filteredConversations.length - displayCount})
-                  </Button>
-                </motion.div>
-              )}
+                  <MessageCircle 
+                    className="h-3 w-3" 
+                    style={{ color: getIconColor(isDarkMode, themeColor, customColor) }}
+                  />
+                  Cuộc trò chuyện
+                </h3>
+                {displayedConversations.map((conv, idx) => (
+                  <ConversationItem
+                    key={conv.id}
+                    conversation={conv}
+                    isActive={conv.id === activeConversationId}
+                    themeColor={themeColor}
+                    isDarkMode={isDarkMode}
+                    index={idx}
+                    customColor={customColor}
+                    onSelect={() => onSelectConversation(conv.id)}
+                    onToggleFavorite={() => onToggleFavorite(conv.id)}
+                    onDelete={() => onDeleteConversation(conv.id)}
+                  />
+                ))}
+              </div>
             </>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Action Buttons - FIXED AT BOTTOM */}
       <div className={`p-2 border-t-2 ${colors.border} ${colors.bgSecondary} flex-shrink-0 space-y-2`}>
@@ -379,8 +356,10 @@ interface ConversationItemProps {
 }
 
 function ConversationItem({ conversation, isActive, themeColor, isDarkMode = true, index, onSelect, onToggleFavorite, onDelete, customColor }: ConversationItemProps) {
-  const messageCount = conversation.messages.filter(m => m.type === 'user').length;
-  const timeAgo = getTimeAgo(conversation.timestamp);
+  const messageCount =
+    conversation.messageCount ??
+    conversation.messages.length;
+  const formattedTime = formatConversationTimestamp(conversation.timestamp);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
 
   const getColors = (theme: ThemeColor, dark: boolean) => {
@@ -449,7 +428,7 @@ function ConversationItem({ conversation, isActive, themeColor, isDarkMode = tru
           className="text-[10px]" 
           style={{ color: getSecondaryTextColor(isDarkMode, themeColor, customColor) }}
         >
-          {timeAgo}
+          {formattedTime}
         </span>
         <div className="flex items-center gap-1">
           <button
@@ -520,14 +499,25 @@ function ConversationItem({ conversation, isActive, themeColor, isDarkMode = tru
   );
 }
 
-function getTimeAgo(date: Date): string {
+function formatConversationTimestamp(date: Date): string {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
   const now = new Date();
   const diffInMs = now.getTime() - date.getTime();
-  const diffInMinutes = Math.floor(diffInMs / 60000);
-  const diffInHours = Math.floor(diffInMs / 3600000);
-  const diffInDays = Math.floor(diffInMs / 86400000);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
 
-  if (diffInMinutes < 60) return `${diffInMinutes} phút trước`;
-  if (diffInHours < 24) return `${diffInHours} giờ trước`;
-  return `${diffInDays} ngày trước`;
+  if (diffInMs < minute) return 'Vừa xong';
+  if (diffInMs < hour) {
+    const minutes = Math.floor(diffInMs / minute);
+    return `${minutes} phút trước`;
+  }
+  if (diffInMs < day) {
+    const hours = Math.floor(diffInMs / hour);
+    return `${hours} giờ trước`;
+  }
+  const days = Math.floor(diffInMs / day);
+  return `${days} ngày trước`;
 }

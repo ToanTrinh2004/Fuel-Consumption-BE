@@ -60,6 +60,8 @@ export interface Conversation {
   messages: MockMessage[];
   timestamp: Date;
   isFavorite?: boolean;
+  messageCount?: number;
+  isPlaceholder?: boolean;
 }
 
 export interface MockUser {

@@ -543,9 +543,6 @@ export default function ChatInput({ onSendMessage, themeColor, isDarkMode, custo
                 </Button>
 
                 <div className="space-y-1 mt-1">
-                  <p className={`text-xs ${colors.accent} opacity-70 text-center`}>
-                    💡 96 timestamps × 15 phút | Benchmark FuelCast
-                  </p>
                   <p className={`text-[10px] ${colors.accent} opacity-60 text-center`}>
                     📋 Dữ liệu sẽ tự động lưu vào lịch sử (tối đa 10 lần)
                   </p>

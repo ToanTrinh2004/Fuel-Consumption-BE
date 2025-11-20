@@ -127,6 +127,15 @@ export default function FuelConsumptionDashboard({
         Total_MomentaryFuel: analysis.avgConsumptionRate / 3600 || 0.85, // Convert to kg/s
     };
 
+    const predictionValueKg =
+        typeof analysis?.fuelConsumption === "number" &&
+        Number.isFinite(analysis.fuelConsumption)
+            ? analysis.fuelConsumption
+            : typeof prediction?.Total_MomentaryFuel === "number" &&
+              Number.isFinite(prediction.Total_MomentaryFuel)
+            ? prediction.Total_MomentaryFuel * 3600
+            : null;
+
     // Prepare data for 7 features bar chart
     const featuresBarData = [
         {
@@ -837,16 +846,17 @@ export default function FuelConsumptionDashboard({
                                         </span>
                                     </div>
                                     <div className={`text-2xl ${colors.text}`}>
-                                        {analysis.fuelConsumption.toFixed(2)} kg
+                                        {analysis.fuelConsumption.toFixed(5)} kg/s
                                     </div>
                                     <div
                                         className={`text-xs ${colors.secondary} mt-1`}
                                     >
-                                        ≈{" "}
-                                        {analysis.fuelConsumptionTons.toFixed(
-                                            3
-                                        )}{" "}
-                                        tons
+                                        {predictionValueKg !== null
+                                            ? `≈ ${(
+                                                  (predictionValueKg / 3600) /
+                                                  1000
+                                              ).toFixed(5)} tons/s`
+                                            : "N/A"}
                                     </div>
                                 </div>
                             </div>
@@ -1365,10 +1375,13 @@ export default function FuelConsumptionDashboard({
                                         </span>
                                     </div>
                                     <div className={`text-sm ${colors.text}`}>
-                                        {prediction.Total_MomentaryFuel.toFixed(
-                                            3
-                                        )}{" "}
-                                        kg/s
+                                        {predictionValueKg !== null
+                                            ? `${predictionValueKg >= 100
+                                                  ? predictionValueKg.toFixed(0)
+                                                  : predictionValueKg.toFixed(
+                                                        2
+                                                    )} kg/s`
+                                            : "N/A"}
                                     </div>
                                 </div>
                             </div>

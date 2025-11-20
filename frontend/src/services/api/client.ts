@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import type { ApiResponse } from '@/shared/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://f891bfc38254.ngrok-free.app';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000';
 const DEFAULT_API_TIMEOUT = 120000;
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT ?? DEFAULT_API_TIMEOUT) || DEFAULT_API_TIMEOUT;
 

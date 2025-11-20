@@ -72,13 +72,18 @@ def _message_to_dict(message: Message) -> Dict[str, Any]:
 def _conversation_to_dict(
     conversation: Conversation, include_messages: bool = False
 ) -> Dict[str, Any]:
+    message_objects = list(conversation.messages or [])
     messages: List[Dict[str, Any]] = []
     last_message: Optional[Dict[str, Any]] = None
 
     if include_messages:
-        messages = [_message_to_dict(msg) for msg in conversation.messages]
-    elif conversation.messages:
-        last_message = _message_to_dict(conversation.messages[-1])
+        messages = [_message_to_dict(msg) for msg in message_objects]
+    elif message_objects:
+        last_message = _message_to_dict(message_objects[-1])
+
+    first_user_message = next(
+        (msg for msg in message_objects if msg.role == "user"), None
+    )
 
     return {
         "id": conversation.id,
@@ -92,6 +97,10 @@ def _conversation_to_dict(
         else None,
         "last_message": last_message,
         "messages": messages if include_messages else None,
+        "message_count": len(message_objects),
+        "first_user_message": _message_to_dict(first_user_message)
+        if first_user_message
+        else None,
     }
 
 

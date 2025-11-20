@@ -170,7 +170,7 @@ const buildDashboardData = (formData: any, predictionValue?: number) => {
   };
 };
 
-type ConversationState = Conversation & { hasLoadedHistory?: boolean };
+type ConversationState = Conversation & { hasLoadedHistory?: boolean; isPlaceholder?: boolean };
 
 const mapApiMessageToMock = (message: ConversationMessageDTO): MockMessage => {
   const metadata = message.metadata ?? undefined;
@@ -208,24 +208,51 @@ const mapApiMessageToMock = (message: ConversationMessageDTO): MockMessage => {
 };
 
 const mapApiConversationToState = (conversation: ConversationDTO): ConversationState => {
-  const messages = conversation.messages
+  const primaryMessages = conversation.messages
     ? conversation.messages.map(mapApiMessageToMock)
-    : conversation.last_message
-      ? [mapApiMessageToMock(conversation.last_message)]
-      : [];
+    : [];
+
+  let messages = primaryMessages;
+
+  if (messages.length === 0) {
+    const placeholders: MockMessage[] = [];
+    if (conversation.first_user_message) {
+      placeholders.push(mapApiMessageToMock(conversation.first_user_message));
+    }
+    if (conversation.last_message) {
+      const lastMessage = mapApiMessageToMock(conversation.last_message);
+      if (!placeholders.some(msg => msg.id === lastMessage.id)) {
+        placeholders.push(lastMessage);
+      }
+    }
+    messages = placeholders;
+  }
 
   const timestamp =
     conversation.updated_at ||
+    conversation.last_message?.created_at ||
     conversation.created_at ||
     new Date().toISOString();
 
+  const fallbackTitle =
+    (conversation.title && conversation.title.trim()) ||
+    messages.find(message => message.type === 'user')?.content.slice(0, 50) ||
+    messages[0]?.content.slice(0, 50) ||
+    'Cuoc tro chuyen';
+
+  const messageCount =
+    conversation.message_count ??
+    (conversation.messages ? conversation.messages.length : messages.length);
+
   return {
     id: String(conversation.id),
-    title: conversation.title || 'Cuoc tro chuyen',
+    title: fallbackTitle,
     messages,
     timestamp: new Date(timestamp),
     isFavorite: false,
     hasLoadedHistory: Boolean(conversation.messages),
+    messageCount,
+    isPlaceholder: false,
   };
 };
 
@@ -394,6 +421,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
               timestamp: mappedMessages.length
                 ? mappedMessages[mappedMessages.length - 1].timestamp
                 : conv.timestamp,
+              messageCount: mappedMessages.length,
             }
           : conv
       )
@@ -405,6 +433,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     if (!trimmedContent || isSendingMessage) {
       return;
     }
+    const derivedTitle = trimmedContent.slice(0, 50);
     setIsSendingMessage(true);
 
     let conversationId = activeConversationId;
@@ -415,22 +444,27 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     try {
       setShowSuggestions(false);
 
-      if (!conversationId || !conversationState) {
-        const title = trimmedContent.slice(0, 50) || 'Cuoc tro chuyen moi';
-        const created = await chatService.createConversation(title);
-        const mappedConversation = mapApiConversationToState(created);
-        conversationId = mappedConversation.id;
-        conversationState = mappedConversation;
-        setActiveConversationId(mappedConversation.id);
-        setConversations(prev => {
-          const filtered = prev.filter(conv => conv.id !== mappedConversation.id);
-          return sortConversations([mappedConversation, ...filtered]);
-        });
-      }
+    if (!conversationState || conversationState.isPlaceholder) {
+      const title = derivedTitle || 'Cuoc tro chuyen moi';
+      const created = await chatService.createConversation(title);
+      const mappedConversation = mapApiConversationToState(created);
+      const placeholderId = conversationState?.id;
+      conversationId = mappedConversation.id;
+      conversationState = mappedConversation;
+      setActiveConversationId(mappedConversation.id);
+      setConversations(prev => {
+        const filtered = prev.filter(
+          conv =>
+            conv.id !== mappedConversation.id &&
+            conv.id !== placeholderId
+        );
+        return sortConversations([mappedConversation, ...filtered]);
+      });
+    }
 
-      if (!conversationId || !conversationState) {
-        throw new Error('Khong the tao cuoc tro chuyen moi.');
-      }
+    if (!conversationId || !conversationState) {
+      throw new Error('Khong the tao cuoc tro chuyen moi.');
+    }
 
       const tempUserMessage: MockMessage = {
         id: tempUserId,
@@ -449,16 +483,28 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
                 ? {
                     ...conv,
                     messages: [...conv.messages, tempUserMessage],
-                    timestamp: new Date(),
+                    timestamp: tempUserMessage.timestamp,
+                    title:
+                      conv.messages.length === 0 && derivedTitle
+                        ? derivedTitle
+                        : conv.title,
                     hasLoadedHistory: true,
+                    messageCount: (conv.messageCount ?? conv.messages.length) + 1,
                   }
                 : conv
             )
           : [
               {
                 ...conversationState,
+                title:
+                  conversationState.messages.length === 0 && derivedTitle
+                    ? derivedTitle
+                    : conversationState.title,
                 messages: optimisticMessages,
+                timestamp: tempUserMessage.timestamp,
                 hasLoadedHistory: true,
+                messageCount:
+                  (conversationState.messageCount ?? conversationState.messages.length) + 1,
               },
               ...prev,
             ];
@@ -525,7 +571,8 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
               ? {
                   ...conv,
                   messages: [...conv.messages, assistantMessage],
-                  timestamp: new Date(),
+                  timestamp: assistantMessage.timestamp,
+                  messageCount: (conv.messageCount ?? conv.messages.length) + 1,
                 }
               : conv
           )
@@ -556,16 +603,23 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
       });
       if (conversationId) {
         setConversations(prev =>
-          prev.map(conv =>
-            conv.id === conversationId
-              ? {
-                  ...conv,
-                  messages: conv.messages.filter(
-                    msg => msg.id !== tempUserId && msg.id !== tempAssistantId
-                  ),
-                }
-              : conv
-          )
+          prev.map(conv => {
+            if (conv.id !== conversationId) {
+              return conv;
+            }
+            const filtered = conv.messages.filter(
+              msg => msg.id !== tempUserId && msg.id !== tempAssistantId
+            );
+            const removed = conv.messages.length - filtered.length;
+            return {
+              ...conv,
+              messages: filtered,
+              messageCount: Math.max(
+                0,
+                (conv.messageCount ?? conv.messages.length) - removed
+              ),
+            };
+          })
         );
       }
     } finally {
@@ -578,21 +632,24 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     setShowDashboard(false);
   };
 
-  const handleNewConversation = async () => {
-    try {
-      const created = await chatService.createConversation();
-      const mapped = mapApiConversationToState(created);
-      setConversations(prev => {
-        const filtered = prev.filter(conv => conv.id !== mapped.id);
-        return sortConversations([mapped, ...filtered]);
-      });
-      setActiveConversationId(mapped.id);
-      setShowDashboard(false);
-    } catch (error) {
-      toast.error('Khong the tao cuoc tro chuyen moi', {
-        description: getErrorMessage(error),
-      });
-    }
+  const handleNewConversation = () => {
+    const tempId = `temp-${Date.now()}`;
+    const placeholder: ConversationState = {
+      id: tempId,
+      title: 'Cuoc tro chuyen moi',
+      messages: [],
+      timestamp: new Date(),
+      isFavorite: false,
+      hasLoadedHistory: true,
+      messageCount: 0,
+      isPlaceholder: true,
+    };
+    setConversations(prev => {
+      const withoutExistingPlaceholder = prev.filter(conv => !conv.isPlaceholder);
+      return [placeholder, ...withoutExistingPlaceholder];
+    });
+    setActiveConversationId(tempId);
+    setShowDashboard(false);
   };
 
   const handleDeleteConversation = async (conversationId: string) => {
