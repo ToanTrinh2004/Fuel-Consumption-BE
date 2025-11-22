@@ -1,14 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { GitCompare, Fuel, Ship, X, ArrowLeft, Download, Maximize2, Minimize2, Activity, Waves, Wind, Thermometer, Anchor, Sparkles, TrendingDown } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { GitCompare, Fuel, Ship, X, ArrowLeft, Download, Maximize2, Minimize2, Activity, Waves, Wind, Thermometer, Anchor, Sparkles, TrendingDown, Loader2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner@2.0.3';
 import type { ThemeColor, Language } from '../App';
 import { Checkbox } from './ui/checkbox';
 import { ScrollArea } from './ui/scroll-area';
 import { motion } from 'motion/react';
 import { t, getFeatureName } from '../utils/translations';
+import { chatService, ComparisonAnalysisResponse } from '../services/api/chat';
 
 interface HistoryItem {
   timestamp: Date;
@@ -54,6 +55,15 @@ interface ComparisonDashboardProps {
 
 export default function ComparisonDashboard({ themeColor, isDarkMode, customColor, language, dashboardHistory, onBack, isFullscreen = false, onToggleFullscreen }: ComparisonDashboardProps) {
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [llmAnalysis, setLlmAnalysis] = useState<{
+    overview?: string;
+    optimal?: { name?: string; fuel?: number | string; reason?: string };
+    factors?: string[];
+    actions?: string[];
+    notes?: string[];
+    raw_text?: string;
+  } | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState<boolean>(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
 
   // Get colors based on theme
@@ -119,6 +129,56 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
     return value >= 100 ? value.toFixed(1) : value.toFixed(digits);
   };
 
+  const formatMaybeNumber = (value: any, suffix = '') => {
+    const num = Number(value);
+    if (Number.isFinite(num)) return `${num.toFixed(3)}${suffix}`;
+    return String(value ?? '');
+  };
+
+  const buildLocalAnalysis = (data: typeof comparisonData) => {
+    if (!data.length) return null;
+    const fuelVals = data
+      .map(getFuelValue)
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const minIdx = data.reduce(
+      (acc, cur, idx) => {
+        const val = getFuelValue(cur);
+        if (typeof val === 'number' && Number.isFinite(val) && val < acc.val) {
+          return { idx, val };
+        }
+        return acc;
+      },
+      { idx: 0, val: Number.POSITIVE_INFINITY }
+    ).idx;
+    const optimal = data[minIdx];
+    const overview =
+      language === 'vi'
+        ? `Tìm thấy ${data.length} phương án, ${optimal?.name || '#1'} có mức tiêu thụ thấp nhất.`
+        : `Found ${data.length} options, ${optimal?.name || '#1'} has the lowest fuel usage.`;
+    const actions =
+      language === 'vi'
+        ? [
+            'Giữ tốc độ ổn định và theo dõi gió/sóng để tránh dao động tiêu thụ.',
+            'Ưu tiên hành trình khi gió và sóng thấp để giảm tiêu thụ nhiên liệu.',
+          ]
+        : [
+            'Keep speed steady and monitor wind/wave to avoid spikes.',
+            'Prefer voyages when wind and wave are low to save fuel.',
+          ];
+    return {
+      overview,
+      optimal: {
+        name: optimal?.name,
+        fuel: formatMaybeNumber(getFuelValue(optimal), ' kg/s'),
+        reason:
+          language === 'vi'
+            ? 'Mức tiêu thụ thấp nhất trong các lựa chọn.'
+            : 'Lowest consumption among options.',
+      },
+      actions,
+    };
+  };
+
   // Toggle selection
   const toggleSelection = (index: number) => {
     if (selectedItems.includes(index)) {
@@ -178,11 +238,18 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
     const features = item.inputFeatures || generateMockFeatures(index);
     const prediction = item.prediction || generateMockPrediction();
     const fuelConsumptionKg = getHistoryFuel(item);
+    const totalMomentary =
+      typeof prediction.Total_MomentaryFuel === 'number'
+        ? prediction.Total_MomentaryFuel
+        : typeof fuelConsumptionKg === 'number'
+        ? fuelConsumptionKg / 3600
+        : null;
     
     return {
       name: `#${dashboardHistory.length - index}`,
+      historyIndex: index,
       ...features,
-      Total_MomentaryFuel: prediction.Total_MomentaryFuel,
+      Total_MomentaryFuel: totalMomentary,
       fuelConsumptionKg,
       timestamp: new Date(item.timestamp).toLocaleString('vi-VN', { 
         month: 'short', 
@@ -192,6 +259,52 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
       }),
     };
   });
+
+  // Gọi LLM backend để sinh phân tích cho các phương án được chọn
+  useEffect(() => {
+    const fetchAnalysis = async () => {
+      if (comparisonData.length < 2) {
+        setLlmAnalysis(null);
+        return;
+      }
+
+      setAnalysisLoading(true);
+      try {
+        const payload = {
+          language,
+          items: comparisonData.map((item) => ({
+            name: item.name,
+            features: {
+              Ship_SpeedOverGround: item.Ship_SpeedOverGround,
+              Weather_WindSpeed10M: item.Weather_WindSpeed10M,
+              Weather_WaveHeight: item.Weather_WaveHeight,
+              Weather_WavePeriod: item.Weather_WavePeriod,
+              Environment_SeaFloorDepth: item.Environment_SeaFloorDepth,
+              Weather_Temperature2M: item.Weather_Temperature2M,
+              Weather_OceanCurrentVelocity: item.Weather_OceanCurrentVelocity,
+            },
+            ship_type:
+              (item.historyIndex !== undefined && dashboardHistory[item.historyIndex]?.vesselInfo?.type) ||
+              (item as any)?.ship_type ||
+              null,
+            fuel_consumption_kg: getFuelValue(item),
+          })),
+        };
+
+        const response: ComparisonAnalysisResponse = await chatService.getComparisonAnalysis(payload);
+        const parsed = (response && typeof response.analysis === 'object') ? response.analysis : null;
+        setLlmAnalysis(parsed || { raw_text: response?.raw_text || '' });
+      } catch (err) {
+        console.error(err);
+        toast.error(language === 'vi' ? 'Không thể gọi LLM phân tích' : 'Failed to get LLM analysis');
+        setLlmAnalysis(buildLocalAnalysis(comparisonData));
+      } finally {
+        setAnalysisLoading(false);
+      }
+    };
+
+    fetchAnalysis();
+  }, [selectedItems, language]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Feature labels mapping
   const featureLabels: Record<string, string> = {
@@ -243,8 +356,14 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
     let optimalIndex = -1;
     
     comparisonData.forEach((data, idx) => {
-      if (data.Total_MomentaryFuel < minFuel) {
-        minFuel = data.Total_MomentaryFuel;
+      const val =
+        typeof data.Total_MomentaryFuel === 'number' && Number.isFinite(data.Total_MomentaryFuel)
+          ? data.Total_MomentaryFuel
+          : typeof data.fuelConsumptionKg === 'number'
+          ? data.fuelConsumptionKg / 3600
+          : Infinity;
+      if (val < minFuel) {
+        minFuel = val;
         optimalIndex = idx;
       }
     });
@@ -263,64 +382,65 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
   };
 
   // Generate AI analysis summary (RAG-style)
+  
+  // Generate AI analysis summary (RAG-style)
+  
+  
+  // Generate AI analysis summary (RAG-style)
   const generateAIAnalysis = (optimal: any, allData: any[]) => {
-    const fuelValues = allData
+    const fuelValuesKg = allData
       .map(getFuelValue)
       .filter((value): value is number => value !== null);
 
-    const optimalFuel = getFuelValue(optimal);
+    const optimalFuelKg = getFuelValue(optimal);
+    const optimalFuelPerSec =
+      typeof optimal?.Total_MomentaryFuel === 'number' && Number.isFinite(optimal.Total_MomentaryFuel)
+        ? optimal.Total_MomentaryFuel
+        : typeof optimalFuelKg === 'number'
+        ? optimalFuelKg / 3600
+        : null;
 
-    if (!fuelValues.length || optimalFuel === null) {
+    if (!fuelValuesKg.length || optimalFuelKg === null) {
       return language === 'vi'
         ? 'Chưa có dữ liệu tiêu thụ nhiên liệu để so sánh.'
         : 'No fuel consumption data available for comparison.';
     }
 
-    const avgFuel = fuelValues.reduce((sum, val) => sum + val, 0) / fuelValues.length;
+    const avgFuelKg = fuelValuesKg.reduce((sum, val) => sum + val, 0) / fuelValuesKg.length;
     const fuelSavingPercent =
-      avgFuel > 0 ? ((avgFuel - optimalFuel) / avgFuel * 100).toFixed(1) : '0';
-    const maxFuel = Math.max(...fuelValues);
-    
-    // Build natural language analysis
-    let analysis = `Dựa trên phân tích ${allData.length} predictions trong lịch sử, tôi nhận thấy ${optimal.name} có mức tiêu thụ nhiên liệu tối ưu nhất ở mức **${optimal.Total_MomentaryFuel.toFixed(3)} kg/s**`;
-    
-    if (optimal.Total_MomentaryFuel < avgFuel) {
-      analysis += `, thấp hơn trung bình ${fuelSavingPercent}% và tiết kiệm được đáng kể so với mức cao nhất (${maxFuel.toFixed(3)} kg/s).`;
-    } else {
-      analysis += `.`;
+      avgFuelKg > 0 ? ((avgFuelKg - optimalFuelKg) / avgFuelKg * 100).toFixed(1) : '0';
+    const maxFuelKg = Math.max(...fuelValuesKg);
+    const fuelDisplay = typeof optimalFuelPerSec === 'number' ? optimalFuelPerSec : optimalFuelKg / 3600;
+
+    const envFactors: string[] = [];
+
+    if (typeof optimal.Ship_SpeedOverGround === 'number') {
+      envFactors.push(`tốc độ ${optimal.Ship_SpeedOverGround.toFixed(2)} m/s`);
+    }
+    if (typeof optimal.Weather_WaveHeight === 'number') {
+      envFactors.push(`sóng ${optimal.Weather_WaveHeight.toFixed(2)} m`);
+    }
+    if (typeof optimal.Weather_WindSpeed10M === 'number') {
+      envFactors.push(`gió ${optimal.Weather_WindSpeed10M.toFixed(2)} m/s`);
+    }
+    if (typeof optimal.Weather_OceanCurrentVelocity === 'number') {
+      envFactors.push(`dòng chảy ${optimal.Weather_OceanCurrentVelocity.toFixed(2)} m/s`);
     }
 
-    const envFactors = [];
+    const recommendation = `Để tối ưu hóa hiệu suất, hãy ưu tiên các điều kiện tương tự như ${optimal.name} — đặc biệt là duy trì tốc độ trong khoảng ${(optimal.Ship_SpeedOverGround - 0.5).toFixed(1)}-${(optimal.Ship_SpeedOverGround + 0.5).toFixed(1)} m/s khi điều kiện thời tiết cho phép.`;
 
-    if (optimal.Ship_SpeedOverGround >= 10 && optimal.Ship_SpeedOverGround <= 12) {
-      envFactors.push(`tốc độ ${optimal.Ship_SpeedOverGround.toFixed(2)} kn nằm trong vùng kinh tế`);
-    } else if (optimal.Ship_SpeedOverGround < 10) {
-      envFactors.push(`tốc độ ${optimal.Ship_SpeedOverGround.toFixed(2)} kn khá thấp, giúp tiết kiệm nhiên liệu`);
-    }
-
-    if (optimal.Weather_WaveHeight < 2.5) {
-      envFactors.push(`sóng thuận lợi (${optimal.Weather_WaveHeight.toFixed(2)}m)`);
-    }
-
-    if (optimal.Weather_WindSpeed10M < 10) {
-      envFactors.push(`gió nhẹ (${optimal.Weather_WindSpeed10M.toFixed(2)} m/s)`);
-    }
-
-    if (optimal.Weather_OceanCurrentVelocity < 1.5) {
-      envFactors.push(`dòng chảy yếu (${optimal.Weather_OceanCurrentVelocity.toFixed(2)} m/s)`);
-    }
-
-    if (envFactors.length > 0) {
-      analysis += `\n\nCác yếu tố môi trường đóng góp: ${envFactors.join(', ')}.`;
-    }
-    
-    // Add recommendation
-    analysis += `\n\n**Khuyến nghị:** Để tối ưu hóa hiệu suất, hãy ưu tiên các điều kiện tương tự như ${optimal.name} - đặc biệt là duy trì tốc độ trong khoảng ${(optimal.Ship_SpeedOverGround - 0.5).toFixed(1)}-${(optimal.Ship_SpeedOverGround + 0.5).toFixed(1)} kn khi điều kiện thời tiết cho phép.`;
-    
-    return analysis;
+    return {
+      overview: `Dựa trên phân tích ${allData.length} predictions, ${optimal.name} có mức tiêu thụ nhiên liệu tối ưu nhất ở mức ${(fuelDisplay || 0).toFixed(3)} kg/s, thấp hơn trung bình ${fuelSavingPercent}% và tiết kiệm so với mức cao nhất ${(maxFuelKg / 3600).toFixed(3)} kg/s.`,
+      optimal: {
+        name: optimal.name,
+        fuel: (fuelDisplay || 0).toFixed(3),
+      },
+      factors: envFactors,
+      actions: [recommendation],
+    };
   };
 
-  const optimalPrediction = findOptimalPrediction();
+const optimalPrediction = findOptimalPrediction();
 
   return (
     <div className={`h-full overflow-hidden flex flex-col ${colors.bg}`}>
@@ -490,7 +610,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                       <Ship className="h-5 w-5 print:!text-gray-800" />
                       <h1 className="print:!text-gray-900">Fluxmare Feature Comparison</h1>
                     </div>
-                    <p className="text-xs print:!text-gray-600 mt-1">{language === 'vi' ? `So sánh ${selectedItems.length} dự đoán - 7 Thông Số + 1 Nhãn` : `Compare ${selectedItems.length} predictions - 7 Features + 1 Label`}</p>
+                    <p className="text-xs print:!text-gray-600 mt-1">{language === 'vi' ? `So sánh ${selectedItems.length} dự đoán — 7 Thông Số + 1 Nhãn` : `Compare ${selectedItems.length} predictions — 7 Features + 1 Label`}</p>
                   </div>
                   <div className="text-xs print:!text-gray-600">
                     {new Date().toLocaleString('vi-VN')}
@@ -551,8 +671,8 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                 </Card>
               </motion.div>
 
-              {/* AI Recommendation - Optimal Prediction */}
-              {optimalPrediction && comparisonData.length > 1 && (
+                            {/* AI Recommendation — Optimal Prediction + LLM Analysis */}
+              {optimalPrediction && comparisonData.length > 0 && (
                 <motion.div
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
@@ -560,11 +680,11 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                 >
                   <Card className={`border-2 ${isDarkMode ? 'border-green-500' : 'border-green-600'} ${colors.card}`}>
                     <CardHeader className={`${isDarkMode ? 'bg-green-900/20' : 'bg-green-50'} p-3`}>
-                      <CardTitle className={`text-sm flex items-center gap-2 ${isDarkMode ? 'text-green-400' : 'text-green-700'}`}>
+                      <CardTitle className={`text-base flex items-center gap-2 ${isDarkMode ? 'text-green-300' : 'text-green-700'}`}>
                         <Sparkles className="h-4 w-4 animate-pulse" />
-                        {t('fluxmareAnalysis', language)}
+                        {language === 'vi' ? 'Fluxmare Phân tích' : 'Analysis by Fluxmare '}
                       </CardTitle>
-                      <p className={`text-[10px] ${isDarkMode ? 'text-green-300/70' : 'text-green-600/80'} mt-0.5`}>
+                      <p className={`text-[11px] ${isDarkMode ? 'text-green-300/70' : 'text-green-600/80'} mt-0.5`}>
                         {t('aiOptimization', language)}
                       </p>
                     </CardHeader>
@@ -573,40 +693,109 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                         <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-green-900/30' : 'bg-green-100'} flex-shrink-0 self-start mt-1`}>
                           <TrendingDown className={`h-5 w-5 ${isDarkMode ? 'text-green-400' : 'text-green-600'}`} />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className={`px-2 py-0.5 rounded text-xs ${isDarkMode ? 'bg-green-500/20 text-green-400' : 'bg-green-100 text-green-700'} border ${isDarkMode ? 'border-green-500/50' : 'border-green-300'}`}>
-                              🎯 {t('optimal', language)}: {optimalPrediction.data.name}
-                            </span>
-                            <span className={`text-[10px] ${isDarkMode ? 'text-green-300/70' : 'text-green-600/80'}`}>
-                              {optimalPrediction.data.timestamp}
-                            </span>
-                          </div>
-
-                          <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-[#0a1f0a]' : 'bg-white'} border ${isDarkMode ? 'border-green-500/30' : 'border-green-200'} mb-3`}>
-                            <div className={`text-xs ${colors.text} whitespace-pre-line leading-relaxed`}>
-                              {optimalPrediction.analysis.split('\n').map((paragraph, idx) => {
-                                // Check if paragraph contains **text** for bold
-                                const parts = paragraph.split(/(\*\*[^*]+\*\*)/g);
-                                return (
-                                  <p key={idx} className={idx > 0 ? 'mt-2.5' : ''}>
-                                    {parts.map((part, partIdx) => {
-                                      if (part.startsWith('**') && part.endsWith('**')) {
-                                        return (
-                                          <strong key={partIdx} className={isDarkMode ? 'text-green-300' : 'text-green-700'}>
-                                            {part.slice(2, -2)}
-                                          </strong>
-                                        );
-                                      }
-                                      return <span key={partIdx}>{part}</span>;
-                                    })}
-                                  </p>
-                                );
-                              })}
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <div className={`p-3 rounded-lg ${isDarkMode ? 'bg-[#0a1f0a]' : 'bg-white'} border ${isDarkMode ? 'border-green-500/30' : 'border-green-200'}`}>
+                            <div className={`text-sm ${colors.text} leading-relaxed`}>
+                              <strong className={isDarkMode ? 'text-green-200' : 'text-green-700'}>
+                                {language === 'vi' ? 'Tối ưu: ' : 'Optimal: '}
+                              </strong>
+                              {llmAnalysis?.optimal?.name || optimalPrediction.data.name} — {llmAnalysis?.optimal?.fuel || formatMaybeNumber(optimalPrediction.data.Total_MomentaryFuel || optimalPrediction.data.fuelConsumptionKg, ' kg/s')}
                             </div>
                           </div>
 
-                          <div className={`flex items-center gap-2 text-[10px] ${isDarkMode ? 'text-green-400/60' : 'text-green-600/70'} italic`}>
+                          <div className={`p-4 rounded-lg border ${isDarkMode ? 'border-green-500/40 bg-green-950/30' : 'border-green-200 bg-green-50'} shadow-sm`}>
+                            {analysisLoading ? (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                {language === 'vi' ? 'Đang phân tích...' : 'Analyzing...'}
+                              </div>
+                            ) : llmAnalysis ? (
+                              <div className="space-y-3 text-sm leading-relaxed">
+                                {llmAnalysis.overview && (
+                                  <div>
+                                    <p className={`font-semibold ${isDarkMode ? 'text-green-200' : 'text-green-800'}`}>
+                                      {language === 'vi' ? 'Tổng quan:' : 'Overview:'}
+                                    </p>
+                                    <p className={colors.text}>{llmAnalysis.overview}</p>
+                                  </div>
+                                )}
+
+                                {llmAnalysis.optimal && (
+                                  <div>
+                                    <p className={`font-semibold ${isDarkMode ? 'text-green-200' : 'text-green-800'}`}>
+                                      {language === 'vi' ? 'Tối ưu:' : 'Optimal:'}
+                                    </p>
+                                    <p className={colors.text}>
+                                      {llmAnalysis.optimal.name && <strong>{llmAnalysis.optimal.name}</strong>} — {typeof llmAnalysis.optimal.fuel !== 'undefined' ? formatMaybeNumber(llmAnalysis.optimal.fuel, ' kg/s') : ''}
+                                      {llmAnalysis.optimal.reason && <> — {llmAnalysis.optimal.reason}</>}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {llmAnalysis.factors && llmAnalysis.factors.length > 0 && (
+                                  <div>
+                                    <p className={`font-semibold ${isDarkMode ? 'text-green-200' : 'text-green-800'}`}>
+                                      {language === 'vi' ? 'Yếu tố chính:' : 'Key factors:'}
+                                    </p>
+                                    <div className="space-y-1 ml-2">
+                                      {llmAnalysis.factors.map((f, idx) => (
+                                        <div key={idx} className={`flex items-start gap-2 ${colors.text}`}>
+                                          <span className="text-green-500">•</span>
+                                          <span>{f}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {llmAnalysis.actions && llmAnalysis.actions.length > 0 && (
+                                  <div>
+                                    <p className={`font-semibold ${isDarkMode ? 'text-green-200' : 'text-green-800'}`}>
+                                      {language === 'vi' ? 'Hành động khuyến nghị:' : 'Recommended actions:'}
+                                    </p>
+                                    <div className="space-y-1 ml-2">
+                                      {llmAnalysis.actions.map((a, idx) => (
+                                        <div key={idx} className={`flex items-start gap-2 ${colors.text}`}>
+                                          <span className="text-green-500">•</span>
+                                          <span>{a}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {llmAnalysis.notes && llmAnalysis.notes.length > 0 && (
+                                  <div>
+                                    <p className={`font-semibold ${isDarkMode ? 'text-green-200' : 'text-green-800'}`}>
+                                      {language === 'vi' ? 'Ghi chú:' : 'Notes:'}
+                                    </p>
+                                    <div className="space-y-1 ml-2">
+                                      {llmAnalysis.notes.map((n, idx) => (
+                                        <div key={idx} className={`flex items-start gap-2 ${colors.text}`}>
+                                          <span className="text-green-500">•</span>
+                                          <span>{n}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {!llmAnalysis.overview && !llmAnalysis.optimal && !llmAnalysis.factors && !llmAnalysis.actions && llmAnalysis.raw_text && (
+                                  <pre className={`text-sm whitespace-pre-wrap ${colors.text}`}>
+                                    {llmAnalysis.raw_text}
+                                  </pre>
+                                )}
+                              </div>
+                            ) : (
+                              <p className={`text-sm ${colors.textSecondary}`}>
+                                {language === 'vi'
+                                  ? 'Chọn ít nhất 1 phương án để xem phân tích từ LLM.'
+                                  : 'Select at least one option to get LLM insights.'}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className={`flex items-center gap-2 text-[11px] ${isDarkMode ? 'text-green-400/60' : 'text-green-600/70'} italic mt-3`}>
                             <Sparkles className="h-3 w-3" />
                             <span>{t('poweredBy', language)}</span>
                           </div>
@@ -617,67 +806,12 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                 </motion.div>
               )}
 
-              {/* 7 Features Radar Chart Comparison */}
-              {comparisonData.length > 1 && (
-                <motion.div
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.25 }}
-                >
-                  <Card className={`border-2 ${colors.border} ${colors.card}`}>
-                    <CardHeader className={`${colors.cardBg} p-3`}>
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Activity className="h-4 w-4" />
-                        {language === 'vi' ? 'So Sánh 7 Thông Số (Normalized)' : '7 Features Comparison (Normalized)'}
-                      </CardTitle>
-                      <p className={`text-[10px] ${isDarkMode ? 'text-[#9ca3af]' : 'text-gray-600'} mt-0.5`}>
-                        {language === 'vi' ? 'Biểu đồ radar cho tất cả thông số đầu vào' : 'Radar chart for all input features'}
-                      </p>
-                    </CardHeader>
-                    <CardContent className="p-3">
-                      <ResponsiveContainer width="100%" height={300}>
-                        <RadarChart data={radarData}>
-                          <PolarGrid stroke={isDarkMode ? "#444" : "#ddd"} />
-                          <PolarAngleAxis 
-                            dataKey="feature" 
-                            tick={{ fill: isDarkMode ? "#e5e5e5" : "#1a1a1a", fontSize: 11 }}
-                          />
-                          <PolarRadiusAxis 
-                            angle={90} 
-                            domain={[0, 100]}
-                            tick={{ fill: isDarkMode ? "#e5e5e5" : "#1a1a1a", fontSize: 9 }}
-                          />
-                          {comparisonData.map((_, idx) => (
-                            <Radar 
-                              key={idx}
-                              name={comparisonData[idx].name}
-                              dataKey={`pred${idx}`}
-                              stroke={predictionColors[idx] || colors.primary}
-                              fill={predictionColors[idx] || colors.primary}
-                              fillOpacity={0.3}
-                            />
-                          ))}
-                          <Legend wrapperStyle={{ fontSize: '10px' }} />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: isDarkMode ? '#1a1a1a' : '#fff', 
-                              border: `1px solid ${colors.primary}`,
-                              fontSize: '10px'
-                            }}
-                          />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              )}
-
               {/* Detailed Features Table */}
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
                 <Card className={`border-2 ${colors.border} ${colors.card}`}>
                   <CardHeader className={`${colors.cardBg} p-3`}>
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -811,6 +945,7 @@ export default function ComparisonDashboard({ themeColor, isDarkMode, customColo
                   </CardContent>
                 </Card>
               </motion.div>
+
             </div>
           )}
         </div>

@@ -999,6 +999,8 @@ export default function FuelConsumptionDashboard({
                                         }
                                         tick={{ fontSize: 10 }}
                                         width={40}
+                                        domain={[0, 100]}
+                                        tickFormatter={(val) => `${val}%`}
                                     />
                                     <Tooltip
                                         contentStyle={{
@@ -1014,10 +1016,31 @@ export default function FuelConsumptionDashboard({
                                             name: string,
                                             props: any
                                         ) => {
-                                            const unit = props.payload.unit;
+                                            const unit = props?.payload?.unit;
+                                            const actualRaw =
+                                                typeof props?.payload
+                                                    ?.actual === "number"
+                                                    ? props.payload.actual
+                                                    : value;
+                                            const actual =
+                                                typeof actualRaw === "number" &&
+                                                Number.isFinite(actualRaw)
+                                                    ? actualRaw
+                                                    : 0;
+                                            const pct =
+                                                typeof value === "number"
+                                                    ? value
+                                                    : 0;
+                                            const precision =
+                                                Math.abs(actual) >= 100
+                                                    ? 1
+                                                    : 2;
                                             return [
-                                                `${value.toFixed(2)} ${unit}`,
-                                                "Value",
+                                                `${actual.toFixed(precision)} ${
+                                                    unit || ""
+                                                } (${pct.toFixed(0)}%)`,
+                                                props?.payload?.feature ||
+                                                    "Value",
                                             ];
                                         }}
                                     />

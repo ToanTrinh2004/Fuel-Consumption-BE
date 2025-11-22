@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Button } from './ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
-import { HelpCircle, Ship, TrendingDown, BarChart3, Star, Lightbulb, Brain, Database, Sparkles, Settings2, History } from 'lucide-react';
+import { HelpCircle, TrendingDown, BarChart3, Database, Sparkles, Settings2, History } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ThemeColor } from '../App';
 
@@ -121,89 +120,12 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
               </AccordionContent>
             </AccordionItem>
 
-            {/* 1. AI Models */}
-            <AccordionItem value="ai-models" className={`border-2 ${colors.border} rounded-lg px-3`}>
-              <AccordionTrigger className={`${colors.text} hover:no-underline`}>
-                <div className="flex items-center gap-2">
-                  <Brain className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">1. Hệ thống AI Models</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="text-xs space-y-3 pt-2">
-                <p className={colors.accent}>🤖 5+ AI Models khả dụng:</p>
-                
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>🌲 <strong>Random Forest</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li>Ensemble learning, chống overfitting tốt</li>
-                    <li>Xử lý missing data, outliers hiệu quả</li>
-                    <li>Feature importance ranking tự động</li>
-                    <li><strong>Tốt nhất cho</strong>: Dữ liệu đa dạng, nhiều biến</li>
-                  </ul>
-                </div>
-
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>🚀 <strong>XGBoost</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li>Gradient boosting, đ�� chính xác cao nhất</li>
-                    <li>Regularization tránh overfitting</li>
-                    <li>Parallel processing, training nhanh</li>
-                    <li><strong>Tốt nhất cho</strong>: Cần accuracy tối đa</li>
-                  </ul>
-                </div>
-
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>🧠 <strong>Neural Network (Deep Learning)</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li>Multi-layer perceptron (MLP)</li>
-                    <li>Phát hiện non-linear patterns phức tạp</li>
-                    <li>Adaptive learning rate</li>
-                    <li><strong>Tốt nhất cho</strong>: Dữ liệu lớn, patterns phức tạp</li>
-                  </ul>
-                </div>
-
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>📈 <strong>Gradient Boosting</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li>Sequential ensemble, tối ưu từng bước</li>
-                    <li>Excellent cho time-series prediction</li>
-                    <li>Hiệu quả với dữ liệu không cân bằng</li>
-                    <li><strong>Tốt nhất cho</strong>: Time-series, sequential data</li>
-                  </ul>
-                </div>
-
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>🎲 <strong>Support Vector Regression (SVR)</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li>Kernel trick cho non-linear relationships</li>
-                    <li>Robust với outliers</li>
-                    <li>Margin-based optimization</li>
-                    <li><strong>Tốt nhất cho</strong>: Dữ liệu phi tuyến, ít nhiễu</li>
-                  </ul>
-                </div>
-
-                <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2`}>
-                  <p className={colors.accent}>📊 <strong>Performance Metrics</strong></p>
-                  <ul className="list-disc ml-5 space-y-0.5 mt-1">
-                    <li><strong>MAE</strong> (Mean Absolute Error): Sai số trung bình</li>
-                    <li><strong>RMSE</strong> (Root Mean Square Error): Độ lệch chuẩn</li>
-                    <li><strong>R² Score</strong>: Độ fit của model (0-1, càng cao càng tốt)</li>
-                    <li><strong>Training Time</strong>: Thời gian huấn luyện</li>
-                  </ul>
-                </div>
-
-                <p className={`${colors.accent} mt-2`}>
-                  💡 <strong>Tip</strong>: Chọn model từ dropdown, so sánh kết quả từ nhiều models để có dự đoán chính xác nhất!
-                </p>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* 2. Input Features (updated to 7 features) */}
+            {/* 1. Input Features (updated to 7 features) */}
             <AccordionItem value="input" className={`border-2 ${colors.border} rounded-lg px-3`}>
               <AccordionTrigger className={`${colors.text} hover:no-underline`}>
                 <div className="flex items-center gap-2">
                   <TrendingDown className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">2. Nhập dữ liệu (7 Features)</span>
+                  <span className="text-sm">1. Nhập dữ liệu (7 Features)</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="text-xs space-y-2 pt-2">
@@ -241,12 +163,12 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
               </AccordionContent>
             </AccordionItem>
 
-            {/* 3. Dashboard */}
+            {/* 2. Dashboard */}
             <AccordionItem value="dashboard" className={`border-2 ${colors.border} rounded-lg px-3`}>
               <AccordionTrigger className={`${colors.text} hover:no-underline`}>
                 <div className="flex items-center gap-2">
                   <BarChart3 className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">3. Dashboard Analytics</span>
+                  <span className="text-sm">2. Dashboard Analytics</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="text-xs space-y-2 pt-2">
@@ -273,31 +195,16 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
                     <li><strong>Current vs Optimal</strong>: So với điều kiện tối ưu</li>
                   </ul>
                   
-                  <p className={colors.accent}>💡 AI Recommendations:</p>
-                  <ul className="list-disc ml-5 space-y-1">
-                    <li>Tối ưu tốc độ: Giảm 10-20% → tiết kiệm 30-40%</li>
-                    <li>Route planning: Tránh sóng lớn, chọn tuyến ngắn</li>
-                    <li>Maintenance alerts: Phát hiện bất thường sớm</li>
-                    <li>Best practices: Khuyến nghị dựa trên historical data</li>
-                  </ul>
-
-                  <p className={colors.accent}>📥 Export & Share:</p>
-                  <ul className="list-disc ml-5 space-y-1">
-                    <li>Download charts dạng PNG/SVG</li>
-                    <li>Export report PDF/Excel với full metrics</li>
-                    <li>Share dashboard link với team</li>
-                    <li>Schedule automated reports (email)</li>
-                  </ul>
                 </div>
               </AccordionContent>
             </AccordionItem>
 
-            {/* 4. History & Tracking */}
+            {/* 3. History & Tracking */}
             <AccordionItem value="history" className={`border-2 ${colors.border} rounded-lg px-3`}>
               <AccordionTrigger className={`${colors.text} hover:no-underline`}>
                 <div className="flex items-center gap-2">
                   <History className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">4. Lịch sử & Theo dõi</span>
+                  <span className="text-sm">3. Lịch sử & Theo dõi</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="text-xs space-y-2 pt-2">
@@ -324,12 +231,12 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
               </AccordionContent>
             </AccordionItem>
 
-            {/* 5. Training Data & Models */}
+            {/* 4. Training Data & Models */}
             <AccordionItem value="training" className={`border-2 ${colors.border} rounded-lg px-3`}>
               <AccordionTrigger className={`${colors.text} hover:no-underline`}>
                 <div className="flex items-center gap-2">
                   <Database className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">5. Training Data & Models</span>
+                  <span className="text-sm">4. Training Data & Models</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="text-xs space-y-2 pt-2">
@@ -363,12 +270,12 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
               </AccordionContent>
             </AccordionItem>
 
-            {/* 6. Settings & Customization */}
+            {/* 5. Settings & Customization */}
             <AccordionItem value="settings" className={`border-2 ${colors.border} rounded-lg px-3`}>
               <AccordionTrigger className={`${colors.text} hover:no-underline`}>
                 <div className="flex items-center gap-2">
                   <Settings2 className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">6. Cài đặt & Tùy chỉnh</span>
+                  <span className="text-sm">5. Cài đặt & Tùy chỉnh</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="text-xs space-y-2 pt-2">
@@ -401,61 +308,6 @@ export default function HelpDialog({ themeColor, isDarkMode, customColor }: Help
               </AccordionContent>
             </AccordionItem>
 
-            {/* 7. Tính năng khác */}
-            <AccordionItem value="features" className={`border-2 ${colors.border} rounded-lg px-3`}>
-              <AccordionTrigger className={`${colors.text} hover:no-underline`}>
-                <div className="flex items-center gap-2">
-                  <Star className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">7. Tính năng nâng cao</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="text-xs space-y-2 pt-2">
-                <ul className="list-disc ml-5 space-y-1">
-                  <li><strong>💡 Smart suggestions</strong>: Nhấn 💡 để xem câu hỏi mẫu</li>
-                  <li><strong>🔍 Advanced search</strong>: Tìm kiếm đa tiêu chí trong history</li>
-                  <li><strong>📊 Compare predictions</strong>: So sánh nhiều predictions cùng lúc</li>
-                  <li><strong>📈 Trend analysis</strong>: Phân tích xu hướng tiêu thụ</li>
-                  <li><strong>🎯 Anomaly detection</strong>: Phát hiện bất thường tự động</li>
-                  <li><strong>📅 Schedule reports</strong>: Báo cáo tự động theo lịch</li>
-                  <li><strong>👥 Team collaboration</strong>: Share với team members</li>
-                  <li><strong>🔐 Role-based access</strong>: Admin, Analyst, User permissions</li>
-                </ul>
-              </AccordionContent>
-            </AccordionItem>
-
-            {/* 8. Tips & Best Practices */}
-            <AccordionItem value="tips" className={`border-2 ${colors.border} rounded-lg px-3`}>
-              <AccordionTrigger className={`${colors.text} hover:no-underline`}>
-                <div className="flex items-center gap-2">
-                  <Lightbulb className={`h-4 w-4 ${colors.accent}`} />
-                  <span className="text-sm">8. Mẹo tối ưu hóa nhiên liệu</span>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="text-xs space-y-2 pt-2">
-                <div className="space-y-2">
-                  <p className={colors.accent}>🎯 Chiến lược tiết kiệm nhiên liệu:</p>
-                  <ul className="list-disc ml-5 space-y-1">
-                    <li><strong>Speed Optimization</strong>: Giảm 10-20% → tiết kiệm 30-40% (Speed^2.8)</li>
-                    <li><strong>Route Planning</strong>: Tối ưu tuyến, tránh sóng lớn</li>
-                    <li><strong>Weather Routing</strong>: Chọn thời điểm, tránh dòng ngược</li>
-                    <li><strong>Regular Maintenance</strong>: Vệ sinh thân tàu, kiểm tra động cơ</li>
-                    <li><strong>Load Optimization</strong>: Phân phối tải đều, không quá tải</li>
-                    <li><strong>Real-time Monitoring</strong>: Theo dõi mỗi 15 phút</li>
-                  </ul>
-                  
-                  <div className={`${colors.bgSecondary} border ${colors.border} rounded p-2 mt-2`}>
-                    <p className={colors.accent}>⚡ <strong>Quick Wins</strong>:</p>
-                    <ul className="list-none ml-0 space-y-1 mt-1">
-                      <li>🟢 <strong>Giảm tốc độ 2 knots</strong>: Tiết kiệm ~15-20% fuel</li>
-                      <li>🟡 <strong>Tránh sóng {'>'}2m</strong>: Giảm 10-15% tiêu thụ</li>
-                      <li>🟠 <strong>Vệ sinh thân tàu 6 tháng/lần</strong>: Tăng 5-8% efficiency</li>
-                      <li>🔴 <strong>Tối ưu trim & ballast</strong>: Cải thiện 3-5%</li>
-                      <li>🔵 <strong>Theo dõi real-time</strong>: Phát hiện vấn đề sớm 2-3 ngày</li>
-                    </ul>
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
           </Accordion>
 
           <div className={`mt-4 p-3 ${colors.bgSecondary} border-2 ${colors.border} rounded-lg`}>

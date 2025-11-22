@@ -56,6 +56,20 @@ interface DeleteAllResponse {
   deleted: number;
 }
 
+export interface ComparisonAnalysisRequest {
+  language?: string;
+  items: Array<{
+    name: string;
+    features: Record<string, number | null>;
+    fuel_consumption_kg?: number | null;
+  }>;
+}
+
+export interface ComparisonAnalysisResponse {
+  analysis: any;
+  raw_text?: string;
+}
+
 export const chatService = {
   async listConversations(): Promise<ConversationDTO[]> {
     const response = await apiClient.get<ConversationsListResponse>('/chat/conversations');
@@ -108,5 +122,12 @@ export const chatService = {
   async deleteAllConversations(): Promise<number> {
     const response = await apiClient.delete<DeleteAllResponse>('/chat/conversations');
     return response.data.deleted ?? 0;
+  },
+
+  async getComparisonAnalysis(
+    payload: ComparisonAnalysisRequest
+  ): Promise<ComparisonAnalysisResponse> {
+    const response = await apiClient.post<ComparisonAnalysisResponse>('/chat/llm-analysis', payload);
+    return response.data;
   },
 };

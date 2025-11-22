@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 import json
 from typing import Any, Dict, List, Optional
+import re
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import joinedload
@@ -332,3 +333,73 @@ def chat_with_auto_prediction():
         import traceback
         traceback.print_exc()
         raise InternalServerError(description=f"Prediction error: {str(e)}")
+
+
+@chat_bp.route("/llm-analysis", methods=["POST"])
+def llm_analysis():
+    """
+    Nhận danh sách các phương án đã chọn (features + fuel_consumption)
+    và gọi LLM để sinh phân tích cho frontend.
+    Trả về JSON có cấu trúc; nếu không parse được thì trả raw_text.
+    """
+    try:
+        payload = request.get_json(silent=True) or {}
+        items = payload.get("items") or []
+        language = payload.get("language", "vi")
+
+        if not items:
+            return jsonify({"error": "items_required"}), 400
+
+        # Chuẩn hóa dữ liệu gửi LLM, giữ tiếng Việt gốc (ensure_ascii=False)
+        items_json = json.dumps(items, ensure_ascii=False, indent=2)
+        prompt = (
+            "Bạn là chuyên gia phân tích tiêu thụ nhiên liệu tàu thủy. "
+            "Mỗi mục có 7 thông số + ship_type. Đơn vị: "
+            "Ship_SpeedOverGround (m/s), Weather_WindSpeed10M (m/s), Weather_WaveHeight (m), "
+            "Weather_WavePeriod (s), Environment_SeaFloorDepth (m), Weather_Temperature2M (°C), "
+            "Weather_OceanCurrentVelocity (m/s). "
+            "Hãy trả về JSON với schema:\n"
+            "{\n"
+            '  "overview": "tóm tắt 1-2 câu",\n'
+            '  "optimal": { "name": "#1", "fuel": 0.064, "reason": "vì sao tối ưu" },\n'
+            '  "factors": ["gió thấp", "sóng nhỏ"],\n'
+            '  "actions": ["hành động 1", "hành động 2"],\n'
+            '  "notes": ["ghi chú thêm"],\n'
+            '  "raw_text": "nếu cần thêm diễn giải"\n'
+            "}\n"
+            "Chỉ trả JSON hợp lệ, không thêm giải thích ngoài JSON.\n\n"
+            f"Dữ liệu:\n{items_json}"
+        )
+
+        llm_messages = [{"role": "user", "content": prompt}]
+        llm_response = asyncio.run(llm_service.chat(llm_messages, language))
+
+        def _clean_and_parse(text: str):
+            # Loại bỏ ```json ... ``` hoặc ``` ...
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.lstrip("`")
+                # cắt phần nhãn (json)
+                if "\n" in cleaned:
+                    cleaned = cleaned.split("\n", 1)[1]
+            cleaned = cleaned.strip().rstrip("`").strip()
+            # Tìm khối JSON đầu tiên
+            json_match = None
+            try:
+                json_match = next(iter(re.finditer(r"\{[\s\S]*\}", cleaned)))
+            except StopIteration:
+                json_match = None
+            target = cleaned
+            if json_match:
+                target = json_match.group(0)
+            try:
+                return json.loads(target)
+            except Exception:
+                return None
+
+        parsed = _clean_and_parse(llm_response)
+
+        return jsonify({"analysis": parsed, "raw_text": llm_response}), 200
+    except Exception as e:
+        # Trả lỗi an toàn để frontend fallback local analysis
+        return jsonify({"analysis": None, "raw_text": "", "error": str(e)}), 500

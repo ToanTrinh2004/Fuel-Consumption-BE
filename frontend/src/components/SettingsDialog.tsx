@@ -7,7 +7,7 @@ import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Slider } from './ui/slider';
 import { Separator } from './ui/separator';
-import { Settings, Trash2, Download, Upload, Bell, Type, Palette, Shield, Sparkles, AlertTriangle, Languages } from 'lucide-react';
+import { Settings, Trash2, Download, Upload, Bell, Type, Palette, AlertTriangle, Languages } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner@2.0.3';
 import {
@@ -180,7 +180,7 @@ export default function SettingsDialog({ themeColor, isDarkMode, customColor, la
           </DialogHeader>
 
           <Tabs defaultValue="appearance" className="w-full">
-            <TabsList className={`grid w-full grid-cols-4 ${isDarkMode ? 'bg-gray-800' : 'bg-white/80'}`}>
+            <TabsList className={`grid w-full grid-cols-3 ${isDarkMode ? 'bg-gray-800' : 'bg-white/80'}`}>
               <TabsTrigger value="appearance" className="text-xs">
                 <Palette className="h-3 w-3 mr-1" />
                 {t('appearance', language)}
@@ -192,10 +192,6 @@ export default function SettingsDialog({ themeColor, isDarkMode, customColor, la
               <TabsTrigger value="data" className="text-xs">
                 <Download className="h-3 w-3 mr-1" />
                 {t('data', language)}
-              </TabsTrigger>
-              <TabsTrigger value="privacy" className="text-xs">
-                <Shield className="h-3 w-3 mr-1" />
-                {t('privacy', language)}
               </TabsTrigger>
             </TabsList>
 
@@ -424,45 +420,7 @@ export default function SettingsDialog({ themeColor, isDarkMode, customColor, la
                 </motion.div>
               </TabsContent>
 
-              {/* Privacy Tab */}
-              <TabsContent value="privacy" className="space-y-4">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-4"
-                >
-                  <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white/80'}`}>
-                    <Label className={`${textClass} mb-2 block`}>Thông tin tài khoản</Label>
-                    <div className={`text-sm space-y-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      <p>👤 Người dùng: <span className={textClass}>{username}</span></p>
-                      <p>📅 Ngày tạo: <span className={textClass}>Hôm nay</span></p>
-                      <p>💬 Số cuộc trò chuyện: <span className={textClass}>{
-                        JSON.parse(localStorage.getItem(`conversations_${username}`) || '[]').length
-                      }</span></p>
-                    </div>
-                  </div>
-
-                  <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white/80'}`}>
-                    <Label className={`${textClass} mb-2 block`}>Bảo mật & Quyền riêng tư</Label>
-                    <p className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                      ✓ Dữ liệu của bạn được lưu trữ cục bộ trên trình duyệt<br />
-                      ✓ Không có dữ liệu nào được gửi đến máy chủ bên ngoài<br />
-                      ✓ Bạn có toàn quyền kiểm soát dữ liệu của mình<br />
-                      ✓ Có thể xóa hoặc xuất dữ liệu bất cứ lúc nào
-                    </p>
-                  </div>
-
-                  <div className={`p-4 rounded-lg bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 text-white`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="h-4 w-4" />
-                      <Label className="text-white">Fluxmare Pro (Sắp ra mắt)</Label>
-                    </div>
-                    <p className="text-xs opacity-90">
-                      Nâng cấp lên Pro để có thêm nhiều tính năng cao cấp!
-                    </p>
-                  </div>
-                </motion.div>
-              </TabsContent>
+              
             </div>
           </Tabs>
         </DialogContent>
