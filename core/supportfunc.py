@@ -247,26 +247,35 @@ def search_embedding(message: str):
 
         sim = cosine_similarity(query_vec, chunk.embedding)
 
-        results.append({
-            "id": chunk.id,
-            "content": chunk.content,
-            "similarity": round(sim, 4)
-        })
+        # Chỉ lấy chunk có similarity >= 0.7
+        if sim >= 0.7:
+            results.append({
+                "id": chunk.id,
+                "content": chunk.content,
+                "similarity": round(sim, 4)
+            })
+
+    # Nếu không có chunk nào ≥ 0.7 → trả về message gốc, không context
+    if not results:
+        return [
+            {"role": "system", "content": "Không tìm thấy thông tin liên quan (similarity < 0.7)."},
+            {"role": "user", "content": message}
+        ]
 
     # Sort giảm dần similarity và lấy top 3
     top_results = sorted(results, key=lambda x: x["similarity"], reverse=True)[:3]
-    context_text = "Dưới đây là các thông tin tham khảo để giúp bạn trả lời câu hỏi, không phải lịch sử trò chuyện:\n"
-    for idx, r in enumerate(top_results, 1):
-        context_text += f"{idx}. {r['content']}\n"
 
-    # Tạo message list
-    messages = [ {
-            "role": "system",
-            "content": context_text
-        },
-        {
-            "role": "user",
-            "content": message
-        }]
+    context_text = (
+        "Dưới đây là các thông tin tham khảo để giúp bạn trả lời câu hỏi, "
+        "không phải lịch sử trò chuyện:\n"
+    )
+    
+    for idx, r in enumerate(top_results, 1):
+        context_text += f"{idx}. {r['content']} (sim={r['similarity']})\n"
+
+    messages = [
+        {"role": "system", "content": context_text},
+        {"role": "user", "content": message}
+    ]
 
     return messages

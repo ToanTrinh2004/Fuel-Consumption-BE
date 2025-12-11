@@ -948,7 +948,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
   const AVAILABLE_MODELS = [
     { id: "meta-llama-3-8b-instruct", label: "LLaMA 3 8B" },
     { id: "qwen/qwen2.5-vl-7b", label: "Qwen2.5 VL 7B" },
-    { id: "nomic-embed-text-v1.5", label: "Nomic Embed" } // optional
+    { id: "google/gemma-2-9b", label: "Gemma 2 9B" } // optional
   ];
 
   return (
