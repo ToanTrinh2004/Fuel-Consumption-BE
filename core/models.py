@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB
 
 from core.database import db
 
@@ -126,3 +127,19 @@ class LLMRoleExample(db.Model):
     def __repr__(self):
         return f"<LLMRoleExample id={self.id} role_id={self.role_id}>"
 
+class DocumentChunk(db.Model):
+    __tablename__ = "fluxmare_chunks"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+
+    content = db.Column(db.Text, nullable=False)
+
+    # Lưu embedding 768 chiều
+    embedding = db.Column(db.ARRAY(db.Float), nullable=True)
+
+    meta = db.Column(JSONB, default=dict)
+
+    created_at = db.Column(db.DateTime, server_default=func.now())
+
+    def __repr__(self):
+        return f"<DocumentChunk {self.id}>"

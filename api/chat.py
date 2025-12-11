@@ -11,14 +11,14 @@ from sqlalchemy.orm import joinedload
 from werkzeug.exceptions import InternalServerError
 
 from core.database import db
-from core.models import Conversation, Message, User
+from core.models import Conversation, DocumentChunk, Message, User
 from core.security import token_required
 from models.request import ChatRequest, ChatWithPredictionRequest, PredictionRequest
 from models.response import ChatWithPredictionResponse, PredictionResponse, ChatResponse
 from services import model_service
 from services.llm_service import llm_service
 from services.model_service import model_service
-from core.supportfunc import extract_params, get_example_response
+from core.supportfunc import cosine_similarity, extract_params, get_example_response, search_embedding, store_document_chunk
 
 
 chat_bp = Blueprint("chat", __name__)
@@ -256,22 +256,17 @@ def predict_endpoint():
 def chat_with_auto_prediction():
     try:
         data = request.get_json()
+        model = data.get("model")
+        print(f"Model selected: {model}")
         messages = data.get("messages", [])
         language = data.get("language", "en")
         context = data.get("context", [])
         conversation_id = data.get("conversation_id")
         conversation_id = int(conversation_id)
-        print(context)
         structured_params = None
-        if isinstance(context, list) and context:
-            structured_params = _extract_structured_inputs(context)
-            messages = context + messages
-        test =   get_conversation(conversation_id)
-        print("test conversation",test)
-        data = test.get_json()  
         user_message_content = messages[-1].get("content", "")
-        print("test get conversation")
-        print(data["messages"]) 
+        print("User message content:")
+        print(user_message_content)
         extracted = extract_params(user_message_content, conversation_id, db.session, structured_params)
         # store new message of user to DB
         user_msg = Message(
@@ -291,7 +286,11 @@ def chat_with_auto_prediction():
                 assistant_reply = response
                 response_payload = {"response": response}
             else:
-                llm_response = asyncio.run(llm_service.chat(messages, "vi"))
+                embedding_result  = search_embedding(user_message)
+                print("Embedding search result:")
+                print(embedding_result)
+                print("Calling LLM for chat...")
+                llm_response = asyncio.run(llm_service.chat(embedding_result, "vi", model_name=model))
                 assistant_reply = llm_response
                 response_payload = {"response": llm_response}
         else:
@@ -403,3 +402,32 @@ def llm_analysis():
     except Exception as e:
         # Trả lỗi an toàn để frontend fallback local analysis
         return jsonify({"analysis": None, "raw_text": "", "error": str(e)}), 500
+
+@chat_bp.route("/chunk", methods=["POST"])
+def chunk():
+    try:
+        data = request.get_json()
+
+        content = data.get("content")
+        metadata = data.get("metadata", {})
+
+        if not content:
+            return jsonify({"error": "content is required"}), 400
+
+        # Gọi lại hàm lưu chunk
+        new_chunk = store_document_chunk(
+            content=content,
+            metadata=metadata
+        )
+
+        return jsonify({
+            "message": "Chunk stored successfully",
+            "chunk_id": new_chunk.id
+        }), 200
+
+    except Exception as e:
+        print("Error storing chunk:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+

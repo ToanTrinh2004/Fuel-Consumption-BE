@@ -3,13 +3,14 @@ import random
 import re
 from typing import Any, Dict, Optional
 
+import numpy as np
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from core.models import LLMRoleExample, State
+from core.models import DocumentChunk, LLMRoleExample, State
 from services.llm_service import llm_service
 from services.model_service import model_service
-
+from core.database import db
 STRUCTURED_FIELD_MAP = {
     "speedOverGround": "Ship_SpeedOverGround",
     "windSpeed10M": "Weather_WindSpeed10M",
@@ -22,18 +23,18 @@ STRUCTURED_FIELD_MAP = {
 }
 
 PATTERNS = {
-    "Ship_SpeedOverGround": r"(?:toc\s*do|ship[_\s-]*speed(?:[_\s-]*over)?[_\s-]*ground)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "Environment_SeaFloorDepth": r"(?:do\s*sau(?:\s*day\s*bien)?|sea[_\s-]*floor[_\s-]*depth)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "Weather_Temperature2M": r"(?:nhiet\s*do|temperature(?:[_\s-]*2m)?)\s*[:\-]?\s*(-?\d+(?:\.\d+)?)",
-    "Weather_OceanCurrentVelocity": r"(?:dong\s*chay(?:\s*dai\s*duong)?|ocean[_\s-]*current[_\s-]*velocity)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "Weather_WindSpeed10M": r"(?:toc\s*do\s*gio|wind[_\s-]*speed(?:[_\s-]*10m)?)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "Weather_WaveHeight": r"(?:do\s*cao\s*song|wave[_\s-]*height)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
-    "Weather_WavePeriod": r"(?:chu\s*ky\s*song|wave[_\s-]*period)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Ship_SpeedOverGround": r"(?:tốc\s*độ|toc\s*do|ship[_\s-]*speed(?:[_\s-]*over)?[_\s-]*ground)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Environment_SeaFloorDepth": r"(?:độ\s*sâu(?:\s*đáy\s*biển)?|do\s*sau(?:\s*day\s*bien)?|sea[_\s-]*floor[_\s-]*depth)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Weather_Temperature2M": r"(?:nhiệt\s*độ|nhiet\s*do|temperature(?:[_\s-]*2m)?)\s*[:\-]?\s*(-?\d+(?:\.\d+)?)",
+    "Weather_OceanCurrentVelocity": r"(?:dòng\s*chảy(?:\s*dải\s*đại\s*duong)?|dong\s*chay(?:\s*dai\s*dương)?|ocean[_\s-]*current[_\s-]*velocity)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Weather_WindSpeed10M": r"(?:tốc\s*độ\s*gió|toc\s*do\s*gio|wind[_\s-]*speed(?:[_\s-]*10m)?)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Weather_WaveHeight": r"(?:độ\s*cao\s*sóng|do\s*cao\s*song|wave[_\s-]*height)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
+    "Weather_WavePeriod": r"(?:chu\s*kỳ\s*sóng|chu\s*ky\s*song|wave[_\s-]*period)\s*[:\-]?\s*(\d+(?:\.\d+)?)",
     "ship_type": r"(?:ship[_\s-]*type\s*[:\-]?\s*)?(ceto|poseidon|triton)",
 }
 
 LABELS = {
-    "Ship_SpeedOverGround": "Tốc độ tàu",
+    "Ship_SpeedOverGround": "tốc độ tàu",
     "Environment_SeaFloorDepth": "Độ sâu đáy biển",
     "Weather_Temperature2M": "Nhiệt độ",
     "Weather_OceanCurrentVelocity": "Tốc độ dòng chảy",
@@ -193,3 +194,79 @@ def extract_params(
         "llm_response": llm_answer,
         "params": params,
     }
+def store_document_chunk(content: str, metadata: dict):
+    """
+    Tạo embedding, sau đó lưu vào bảng fluxmare_chunks.
+    """
+    try:
+        # 1. Tạo embedding từ nội dung
+        embedding_vector = model_service.get_embedding(content)
+
+        # 2. Tạo row mới
+        chunk = DocumentChunk(
+            content=content,
+            embedding=embedding_vector,
+            metadata=metadata,
+        )
+
+        # 3. Lưu DB
+        db.session.add(chunk)
+        db.session.commit()
+
+        print(f"[✓] Saved chunk id={chunk.id}, dim={len(embedding_vector)}")
+        return chunk
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Failed to store chunk: {str(e)}")
+        raise
+
+def cosine_similarity(a, b):
+    a = np.array(a)
+    b = np.array(b)
+
+    if a is None or b is None:
+        return 0.0
+
+    denom = (np.linalg.norm(a) * np.linalg.norm(b))
+    if denom == 0:
+        return 0.0
+
+    return float(np.dot(a, b) / denom)
+def search_embedding(message: str):
+    # 1. Lấy embedding của message nhập vào
+    query_vec = model_service.get_embedding(message)
+
+    # 2. Lấy toàn bộ chunk từ DB
+    chunks = DocumentChunk.query.all()
+
+    results = []
+    for chunk in chunks:
+        if chunk.embedding is None:
+            continue
+
+        sim = cosine_similarity(query_vec, chunk.embedding)
+
+        results.append({
+            "id": chunk.id,
+            "content": chunk.content,
+            "similarity": round(sim, 4)
+        })
+
+    # Sort giảm dần similarity và lấy top 3
+    top_results = sorted(results, key=lambda x: x["similarity"], reverse=True)[:3]
+    context_text = "Dưới đây là các thông tin tham khảo để giúp bạn trả lời câu hỏi, không phải lịch sử trò chuyện:\n"
+    for idx, r in enumerate(top_results, 1):
+        context_text += f"{idx}. {r['content']}\n"
+
+    # Tạo message list
+    messages = [ {
+            "role": "system",
+            "content": context_text
+        },
+        {
+            "role": "user",
+            "content": message
+        }]
+
+    return messages

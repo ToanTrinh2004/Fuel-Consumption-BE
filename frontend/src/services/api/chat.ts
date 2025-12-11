@@ -1,3 +1,4 @@
+import { m } from 'motion/react';
 import apiClient from './client';
 
 export interface ConversationMessageDTO {
@@ -27,6 +28,7 @@ export interface ChatCompletionMessage {
 }
 
 export interface ChatCompletionRequest {
+  model?: string;
   conversationId?: string | number;
   messages: ChatCompletionMessage[];
   language?: string;
@@ -106,6 +108,7 @@ export const chatService = {
 
   async chat(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
     const payload = {
+      model: request.model,
       conversation_id: request.conversationId,
       messages: request.messages,
       language: request.language,

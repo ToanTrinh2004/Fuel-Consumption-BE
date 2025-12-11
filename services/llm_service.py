@@ -76,7 +76,7 @@ class LLMService:
         api_url: str = "http://localhost:1234/v1/chat/completions",
         model_name: str = "llama3-8b-instruct",
         temperature: float = 0.6,
-        max_tokens: int = 256
+        max_tokens: int = 1024
     ):
         self.api_url = api_url or os.getenv("LLM_API_URL", "http://localhost:1234/v1/chat/completions")
         self.model_name = model_name or os.getenv("LLM_MODEL_NAME", "llama3-8b-instruct")
@@ -116,7 +116,8 @@ class LLMService:
     async def chat(
         self, 
         messages: List[Dict[str, str]], 
-        language: str = "en"
+        language: str = "en",
+        model_name: Optional[str] = None
     ) -> str:
         """
         Send chat request to LLM
@@ -138,12 +139,13 @@ class LLMService:
         print(full_messages)
         
         payload = {
-            "model": self.model_name,
-            "messages": full_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            "stream": False
+        "model": model_name or self.model_name,
+        "messages": full_messages,
+        "temperature": self.temperature,
+        "max_tokens": self.max_tokens,
+        "stream": False
         }
+
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:

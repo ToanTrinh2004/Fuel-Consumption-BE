@@ -33,4 +33,4 @@ templates/
 node_modules/
 models/ceto_best_ml_model.pkl
 models/poseidon_best_ml_model.pkl
-models/triton_best_model.pkl
+models/triton_best_ml_model.pkl

@@ -19,6 +19,7 @@ import fluxmareLogo from 'figma:asset/48159e3c19318e6ee94d6f46a7da4911deba57ae.p
 import { getLogoFilter, getLogoOpacity } from '../utils/logoUtils';
 import { t } from '../utils/translations';
 import { chatService, ChatCompletionMessage, ConversationDTO, ConversationMessageDTO } from '../services/api/chat';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 interface ChatBotProps {
   username: string;
@@ -32,6 +33,7 @@ interface ChatBotProps {
   onChangeCustomColor: (color: string) => void;
   onChangeLanguage: (lang: Language) => void;
 }
+
 
 // Helper function to calculate luminance and get contrast text color
 const getContrastColor = (hexColor: string): string => {
@@ -304,6 +306,8 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const messages = activeConversation?.messages || [];
   const isInputBusy = isSendingMessage;
+  const [currentModel, setCurrentModel] = useState("meta-llama-3-8b-instruct");
+
 
   useEffect(() => {
     let ignore = false;
@@ -429,6 +433,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
   };
 
   const handleSendMessage = async (content: string, formData: any) => {
+    const model = currentModel;
     const trimmedContent = content.trim();
     if (!trimmedContent || isSendingMessage) {
       return;
@@ -518,6 +523,7 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
 
       const contextMessages = buildContextMessages(formData, language);
       const chatResponse = await chatService.chat({
+        model,
         conversationId,
         messages: payloadMessages,
         language,
@@ -939,6 +945,11 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
     '--custom-color-light': getLighterColor(customColor),
     '--custom-color-dark': adjustBrightness(customColor, -0.2),
   } as React.CSSProperties : {};
+  const AVAILABLE_MODELS = [
+    { id: "meta-llama-3-8b-instruct", label: "LLaMA 3 8B" },
+    { id: "qwen/qwen2.5-vl-7b", label: "Qwen2.5 VL 7B" },
+    { id: "nomic-embed-text-v1.5", label: "Nomic Embed" } // optional
+  ];
 
   return (
     <div className={`flex h-screen ${colors.bg} overflow-hidden`} style={customStyles}>
@@ -1010,8 +1021,38 @@ export default function ChatBot({ username, onLogout, themeColor, isDarkMode, cu
                 </p>
               </div>
             </div>
+            <div>
+                <Select value={currentModel} onValueChange={setCurrentModel}>
+                  <SelectTrigger
+                    className={`w-[180px] h-7 border-2 ${colors.border} ${colors.accent} text-xs`}
+                    style={themeColor === 'custom' ? {
+                      borderColor: colors.customBorderColor,
+                      color: colors.customPrimaryColor
+                    } : {}}
+                    title="Chọn mô hình LLM"
+                  >
+                    <SelectValue placeholder="Chọn mô hình LLM" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value="meta-llama-3-8b-instruct" className="text-xs">
+                      LLaMA 3 8B
+                    </SelectItem>
+                    <SelectItem value="qwen/qwen2.5-vl-7b" className="text-xs">
+                      Qwen2.5 VL 7B
+                    </SelectItem>
+                    <SelectItem value="nomic-embed-text-v1.5" className="text-xs">
+                      Nomic Embed
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+
+            </div>
+            
             <div className="flex items-center gap-1">
+               
               <HelpDialog themeColor={themeColor} isDarkMode={isDarkMode} />
+              
               <Button
                 onClick={handleToggleSuggestions}
                 variant="outline"
